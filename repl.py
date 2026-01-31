@@ -135,13 +135,32 @@ def _summarize_namespace() -> str:
     return "\n".join(lines[:30]) or "(no user variables)"
 
 
+class _LimitedOutput:
+    """StringIO wrapper that raises error if output exceeds limit."""
+    def __init__(self, limit: int = 10000):
+        self.limit = limit
+        self.buffer = []
+        self.size = 0
+
+    def write(self, s: str):
+        self.size += len(s)
+        if self.size > self.limit:
+            raise RuntimeError(f"Output too large (>{self.limit} chars). Use slicing or summarize.")
+        self.buffer.append(s)
+
+    def flush(self):
+        pass
+
+    def getvalue(self) -> str:
+        return "".join(self.buffer)
+
+
 def _exec_code(code: str) -> str:
     """Execute code in the shared namespace, return output."""
-    import io
     import sys
 
     old_stdout = sys.stdout
-    sys.stdout = captured = io.StringIO()
+    sys.stdout = captured = _LimitedOutput(limit=10000)
 
     try:
         # Try eval first (expression)

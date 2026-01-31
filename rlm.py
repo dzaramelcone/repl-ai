@@ -68,8 +68,15 @@ def rlm(query: str, context: str, depth: int = 0, max_iters: int = 10) -> str:
         result["_final"] = str(answer)
         return answer
 
+    output_size = [0]  # Use list for mutability in closure
+    OUTPUT_LIMIT = 10000
+
     def capture_print(*args, **kwargs):
-        output_buffer.append(" ".join(str(a) for a in args))
+        text = " ".join(str(a) for a in args)
+        output_size[0] += len(text)
+        if output_size[0] > OUTPUT_LIMIT:
+            raise RuntimeError(f"Output too large (>{OUTPUT_LIMIT} chars). Use slicing or summarize.")
+        output_buffer.append(text)
 
     for i in range(max_iters):
         prompt = f"""Query: {query}
