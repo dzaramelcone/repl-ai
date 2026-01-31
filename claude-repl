@@ -1,0 +1,91 @@
+#!/bin/bash
+cd /Users/dzaramelcone/lab/rlm
+exec uv run python -i -c "
+import sys
+import re
+from repl import ask_sync as ask, clear, init, console, bg, tasks, _bg_tasks, edit, read, load_claude_sessions
+from rlm import rlm
+from rich.panel import Panel
+from rich.text import Text
+
+# Dynamic prompt with system info
+import os
+from repl import _history
+
+# ANSI codes
+NUM = '\033[38;5;117m'   # bright blue-ish
+DIM = '\033[38;5;242m'   # grey
+RESET = '\033[0m'
+CYAN = '\033[36m'
+YELLOW = '\033[33m'
+
+def _approx_tokens(text):
+    '''Rough token estimate: ~4 chars per token'''
+    return len(text) // 4
+
+def _format_tokens(n):
+    if n >= 1_000_000_000:
+        return f'{NUM}{n/1_000_000_000:.1f}{DIM}Gt'
+    elif n >= 1_000_000:
+        return f'{NUM}{n/1_000_000:.1f}{DIM}Mt'
+    elif n >= 1_000:
+        return f'{NUM}{n/1_000:.1f}{DIM}kt'
+    return f'{NUM}{n}{DIM}t'
+
+class DynamicPrompt:
+    def __str__(self):
+        parts = []
+
+        # Memory
+        try:
+            import resource
+            mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024
+            parts.append(f'{NUM}{mem_mb:.0f}{DIM}MB')
+        except:
+            pass
+
+        # Context size (if 'context' var exists)
+        ctx = ns.get('context')
+        if ctx and isinstance(ctx, str) and len(ctx) > 0:
+            toks = _approx_tokens(ctx)
+            parts.append(f'{DIM}ctx:{_format_tokens(toks)}')
+
+        # History size
+        if _history:
+            hist_chars = sum(len(m.get('content', '')) for m in _history)
+            hist_toks = _approx_tokens(hist_chars)
+            parts.append(f'{DIM}hist:{_format_tokens(hist_toks)}')
+
+        # Running background tasks
+        running = len([t for t in _bg_tasks if t.running()])
+        if running > 0:
+            parts.append(f'{YELLOW}⚡{running}{RESET}')
+
+        info = ' '.join(parts)
+        return f'{DIM}{info}{RESET} {CYAN}◈{RESET} ' if info else f'{CYAN}◈{RESET} '
+
+sys.ps1 = DynamicPrompt()
+sys.ps2 = '\033[2m⋮\033[0m '
+
+ns = globals()
+ns.update({'ask': ask, 'clear': clear, 're': re, 'rlm': rlm, 'load_claude_sessions': load_claude_sessions, 'bg': bg, 'tasks': tasks, 'edit': edit, 'read': read})
+init(ns, ns)
+
+console.print()
+console.print(Panel(
+    Text.from_markup('''[bold cyan]ask[/][dim](\"prompt\")[/]        [dim]→ ask Claude (streams response)[/]
+[bold cyan]bg[/][dim](\"prompt\")[/]         [dim]→ run in background, returns Future[/]
+[bold cyan]tasks[/][dim]()[/]             [dim]→ show background task status[/]
+[bold cyan]clear[/][dim]()[/]             [dim]→ clear conversation history[/]
+
+[bold yellow]read[/][dim](path)[/]           [dim]→ read file with line numbers[/]
+[bold yellow]edit[/][dim](path, old, new)[/] [dim]→ replace text in file[/]
+
+[bold magenta]load_claude_sessions[/][dim]() → load ~/.claude/projects/*.jsonl[/]
+[bold magenta]rlm[/][dim](query, context)[/]    [dim]→ recursive LLM search[/]'''),
+    title='[bold white]mahtab[/]',
+    subtitle='[dim]Ctrl+C to cancel[/]',
+    border_style='bright_black'
+))
+console.print()
+"
