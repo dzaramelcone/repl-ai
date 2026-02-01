@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 import logging
+from typing import Protocol
 
-from mahtab.io.formatters import XMLFormatter
+from mahtab.io.formatters import BytesFormatter, XMLFormatter
+
+
+class Store(Protocol):
+    """Protocol for message stores."""
+
+    def append(self, data: bytes) -> None: ...
 
 
 class PromptHandler(logging.Handler):
@@ -23,3 +30,15 @@ class PromptHandler(logging.Handler):
 
     def clear(self) -> None:
         self.buffer.clear()
+
+
+class StoreHandler(logging.Handler):
+    """Appends bytes to a store."""
+
+    def __init__(self, store: Store) -> None:
+        super().__init__()
+        self.store = store
+        self.setFormatter(BytesFormatter())
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.store.append(self.format(record))

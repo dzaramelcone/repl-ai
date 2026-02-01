@@ -2,7 +2,7 @@
 
 import logging
 
-from mahtab.io.handlers import PromptHandler
+from mahtab.io.handlers import PromptHandler, StoreHandler
 
 
 def test_prompt_handler_accumulates_xml():
@@ -36,3 +36,26 @@ def test_prompt_handler_clear():
     assert handler.get_context() != ""
     handler.clear()
     assert handler.get_context() == ""
+
+
+class MockStore:
+    """Mock store for testing."""
+
+    def __init__(self) -> None:
+        self.data = bytearray()
+
+    def append(self, data: bytes) -> None:
+        self.data.extend(data)
+
+
+def test_store_handler_appends_bytes():
+    store = MockStore()
+    handler = StoreHandler(store)
+
+    record = logging.LogRecord(
+        name="test", level=logging.INFO, pathname="", lineno=0, msg="hello", args=(), exc_info=None
+    )
+    record.tag = "user-chat"
+    handler.emit(record)
+
+    assert store.data == b"<user-chat>hello</user-chat>"
