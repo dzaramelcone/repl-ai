@@ -14,35 +14,36 @@ if TYPE_CHECKING:
 
 
 class SessionInterpreter(InteractiveInterpreter):
-    """Python interpreter that sends output to session loggers."""
+    """Python interpreter that captures output."""
 
     def __init__(self, session: Session):
         super().__init__(locals=session.namespace)
         self.session = session
         self._stdout_buffer = io.StringIO()
         self._stderr_buffer = io.StringIO()
+        self._error_buffer = io.StringIO()
 
     def write(self, data: str) -> None:
-        """Called by InteractiveInterpreter for error output."""
-        self.session.log_user_repl.error(f"[red]{data.rstrip()}[/red]")
+        """Called by InteractiveInterpreter for error output (tracebacks)."""
+        self._error_buffer.write(data)
 
-    def run(self, source: str) -> None:
-        """Execute source code, capturing all output."""
+    def run(self, source: str) -> tuple[str, str]:
+        """Execute source code, returning (output, error) strings."""
         self._stdout_buffer = io.StringIO()
         self._stderr_buffer = io.StringIO()
+        self._error_buffer = io.StringIO()
 
         with redirect_stdout(self._stdout_buffer), redirect_stderr(self._stderr_buffer):
             self.runsource(source, "<input>", "single")
 
-        # Log captured stdout
-        stdout = self._stdout_buffer.getvalue()
-        if stdout:
-            self.session.log_user_repl.info(stdout.rstrip())
+        stdout = self._stdout_buffer.getvalue().rstrip()
+        stderr = self._stderr_buffer.getvalue().rstrip()
+        errors = self._error_buffer.getvalue().rstrip()
 
-        # Log captured stderr (from print(..., file=sys.stderr))
-        stderr = self._stderr_buffer.getvalue()
-        if stderr:
-            self.session.log_user_repl.error(f"[red]{stderr.rstrip()}[/red]")
+        # Combine stderr and interpreter errors
+        all_errors = "\n".join(filter(None, [stderr, errors]))
+
+        return stdout, all_errors
 
 
 class Session:

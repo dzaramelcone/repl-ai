@@ -35,7 +35,13 @@ def strip_code_blocks(text: str) -> str:
 def make_code_panel(code: str, title: str, border_style: str = "blue") -> Panel:
     """Create a Rich Panel with syntax-highlighted Python code."""
     syntax = Syntax(code, "python", theme="monokai", line_numbers=False)
-    return Panel(syntax, title=title, border_style=border_style, expand=False)
+    return Panel(syntax, title=f"{title} [dim]in[/dim]", border_style=border_style, expand=False)
+
+
+def make_output_panel(output: str, title: str, border_style: str = "blue", is_error: bool = False) -> Panel:
+    """Create a Rich Panel for execution output."""
+    content = f"[red]{output}[/red]" if is_error else output
+    return Panel(content, title=f"{title} [dim]out[/dim]", border_style=border_style, expand=False)
 
 
 class RichLogHandler(logging.Handler):
@@ -233,8 +239,12 @@ class MahtabApp(App):
         # Show code in a panel
         repl_pane.write(make_code_panel(code, "You", "green"))
 
-        # Execute and let interpreter log output via handlers
-        session.interpreter.run(code)
+        # Execute and show output in panel
+        stdout, errors = session.interpreter.run(code)
+        if errors:
+            repl_pane.write(make_output_panel(errors, "You", "green", is_error=True))
+        elif stdout:
+            repl_pane.write(make_output_panel(stdout, "You", "green"))
 
     async def _submit_to_chat(self, session: Session):
         """Send input to chat (Claude)."""
@@ -266,9 +276,9 @@ class MahtabApp(App):
         def on_execution(code: str, output: str, is_error: bool):
             repl_pane.write(make_code_panel(code, "Claude", "cyan"))
             if is_error:
-                repl_pane.write(f"[red]{output}[/red]")
+                repl_pane.write(make_output_panel(output, "Claude", "cyan", is_error=True))
             elif output and output != "(no output)":
-                repl_pane.write(output)
+                repl_pane.write(make_output_panel(output, "Claude", "cyan"))
 
         try:
             response = await agent.ask(prompt, streaming_handler=None, on_execution=on_execution)
