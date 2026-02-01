@@ -5,3 +5,19 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: radon-cc
+        name: radon cyclomatic complexity
+        entry: radon cc --min B --show-complexity
+        language: system
+        types: [python]
+        pass_filenames: true
+
+      - id: radon-mi
+        name: radon maintainability index
+        entry: radon mi --min B --show
+        language: system
+        types: [python]
+        pass_filenames: true

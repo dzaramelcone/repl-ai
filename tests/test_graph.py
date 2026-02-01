@@ -1,5 +1,9 @@
 """Tests for LangGraph agent."""
 
+from unittest.mock import AsyncMock
+
+import pytest
+
 from mahtab.agent.graph import AgentState, ReflectionResult
 
 
@@ -139,3 +143,24 @@ def test_reflect_node_handles_malformed_json():
     # Should default to incomplete on parse failure
     assert result.is_complete is False
     assert "parse" in result.reasoning.lower() or "invalid" in result.reasoning.lower()
+
+
+@pytest.mark.asyncio
+async def test_generate_node_calls_llm():
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    from mahtab.agent.graph import generate_node
+
+    mock_llm = AsyncMock()
+    mock_llm.ainvoke.return_value = AIMessage(content="Here is code:\n```python\nx=1\n```")
+
+    state: AgentState = {
+        "messages": [HumanMessage(content="set x to 1")],
+        "system_prompt": "You are helpful.",
+        "turn_count": 0,
+    }
+
+    result = await generate_node(state, mock_llm)
+    assert "```python" in result["current_response"]
+    assert result["turn_count"] == 1
+    mock_llm.ainvoke.assert_called_once()

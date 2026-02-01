@@ -114,6 +114,31 @@ def _parse_reflection_response(response: str) -> ReflectionResult:
         )
 
 
+async def generate_node(state: AgentState, llm) -> dict:
+    """Generate a response from the LLM.
+
+    Args:
+        state: Current agent state with messages and system_prompt.
+        llm: Language model to call.
+
+    Returns:
+        Dict with current_response and incremented turn_count.
+    """
+    from langchain_core.messages import SystemMessage
+
+    messages = [
+        SystemMessage(content=state["system_prompt"]),
+        *state["messages"],
+    ]
+
+    response = await llm.ainvoke(messages)
+
+    return {
+        "current_response": response.content,
+        "turn_count": state.get("turn_count", 0) + 1,
+    }
+
+
 async def reflect_node(state: AgentState, llm) -> dict:
     """Evaluate whether execution satisfied the original request.
 
