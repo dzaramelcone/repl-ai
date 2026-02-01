@@ -59,3 +59,24 @@ def extract_code_node(state: AgentState) -> dict:
     response = state.get("current_response", "")
     blocks = re.findall(r"```python\n(.*?)```", response, re.DOTALL)
     return {"code_blocks": [b.strip() for b in blocks]}
+
+
+def execute_node(state: AgentState) -> dict:
+    """Execute all code blocks and collect results.
+
+    Args:
+        state: Current agent state with code_blocks and session.
+
+    Returns:
+        Dict with execution_results list to merge into state.
+    """
+    from mahtab.core.executor import execute_code
+
+    session = state["session"]
+    results = []
+
+    for block in state.get("code_blocks", []):
+        output, is_error = execute_code(block, session)
+        results.append((output, is_error))
+
+    return {"execution_results": results}

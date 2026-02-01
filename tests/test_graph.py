@@ -64,3 +64,50 @@ def test_extract_code_node_no_blocks():
     }
     result = extract_code_node(state)
     assert result["code_blocks"] == []
+
+
+def test_execute_node_success():
+    from mahtab.agent.graph import execute_node
+    from mahtab.core.state import SessionState
+
+    session = SessionState()
+    state: AgentState = {
+        "code_blocks": ["x = 42", "print(x)"],
+        "execution_results": [],
+        "session": session,
+    }
+    result = execute_node(state)
+    assert len(result["execution_results"]) == 2
+    assert result["execution_results"][1][0] == "42\n"  # print output
+    assert result["execution_results"][1][1] is False  # no error
+
+
+def test_execute_node_error():
+    from mahtab.agent.graph import execute_node
+    from mahtab.core.state import SessionState
+
+    session = SessionState()
+    state: AgentState = {
+        "code_blocks": ["1/0"],
+        "execution_results": [],
+        "session": session,
+    }
+    result = execute_node(state)
+    assert len(result["execution_results"]) == 1
+    assert "division by zero" in result["execution_results"][0][0].lower()
+    assert result["execution_results"][0][1] is True  # is error
+
+
+def test_execute_node_updates_namespace():
+    from mahtab.agent.graph import execute_node
+    from mahtab.core.state import SessionState
+
+    session = SessionState()
+    state: AgentState = {
+        "code_blocks": ["my_var = 'hello'"],
+        "execution_results": [],
+        "session": session,
+    }
+    execute_node(state)
+    # exec(code, globals, locals) puts assignments in locals_ns
+    assert session.locals_ns.get("my_var") == "hello"
