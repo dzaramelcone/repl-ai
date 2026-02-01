@@ -3,15 +3,31 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from textual.app import App
-from textual.containers import Horizontal, Vertical
-from textual.widgets import Footer, Header, RichLog, TabbedContent, TabPane, TextArea
+from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.widgets import (
+    Footer,
+    Header,
+    LoadingIndicator,
+    Markdown,
+    RichLog,
+    Static,
+    TabbedContent,
+    TabPane,
+    TextArea,
+)
 
 from mahtab.agent.repl_agent import REPLAgent
 from mahtab.session import Session
 from mahtab.store import Store
-from mahtab.ui.handlers import SessionStreamingHandler, StoreHandler
+from mahtab.ui.handlers import StoreHandler
+
+
+def strip_code_blocks(text: str) -> str:
+    """Remove fenced code blocks from markdown text."""
+    return re.sub(r"```[\w]*\n.*?```", "", text, flags=re.DOTALL).strip()
 
 
 class RichLogHandler(logging.Handler):
@@ -62,6 +78,21 @@ class MahtabApp(App):
         height: 5;
         border: solid $accent;
     }
+
+    .user-message {
+        background: $surface;
+        padding: 1;
+        margin: 1 0;
+    }
+
+    .assistant-message {
+        padding: 1;
+        margin: 1 0;
+    }
+
+    .chat-loading {
+        height: 3;
+    }
     """
 
     BINDINGS = [
@@ -83,7 +114,7 @@ class MahtabApp(App):
             with TabPane(f"Session {session.id}", id=f"tab-{session.id}"):
                 yield Vertical(
                     Horizontal(
-                        RichLog(id=f"chat-{session.id}", classes="chat-pane", wrap=True, markup=True),
+                        VerticalScroll(id=f"chat-{session.id}", classes="chat-pane"),
                         RichLog(id=f"repl-{session.id}", classes="repl-pane", wrap=True, markup=True),
                     ),
                     TextArea(id=f"input-{session.id}", classes="input-area", language="python"),
@@ -100,16 +131,7 @@ class MahtabApp(App):
 
     def _wire_session_handlers(self, session: Session):
         """Wire logging handlers for a session's widgets."""
-        chat = self.query_one(f"#chat-{session.id}", RichLog)
         repl = self.query_one(f"#repl-{session.id}", RichLog)
-
-        # Chat pane gets user and LLM chat
-        chat_handler = RichLogHandler(chat)
-        chat_handler.setFormatter(logging.Formatter("%(message)s"))
-        session.log_user_chat.addHandler(chat_handler)
-        session.log_llm_chat.addHandler(chat_handler)
-        session.log_user_chat.setLevel(logging.INFO)
-        session.log_llm_chat.setLevel(logging.INFO)
 
         # REPL pane gets user and LLM repl
         repl_handler = RichLogHandler(repl)
@@ -139,7 +161,7 @@ class MahtabApp(App):
         # Create inline widgets (custom Widget classes don't work in TabPane)
         content = Vertical(
             Horizontal(
-                RichLog(id=f"chat-{session.id}", classes="chat-pane", wrap=True, markup=True),
+                VerticalScroll(id=f"chat-{session.id}", classes="chat-pane"),
                 RichLog(id=f"repl-{session.id}", classes="repl-pane", wrap=True, markup=True),
             ),
             TextArea(id=f"input-{session.id}", classes="input-area", language="python"),
@@ -213,15 +235,22 @@ class MahtabApp(App):
             return
         input_widget.clear()
 
-        # Log the prompt
-        session.log_user_chat.info(f"You: {prompt}")
+        chat_pane = self.query_one(f"#chat-{session.id}", VerticalScroll)
+
+        # Add user message
+        user_msg = Static(f"[bold]You:[/bold] {prompt}", classes="user-message", markup=True)
+        chat_pane.mount(user_msg)
+
+        # Add loading indicator
+        loading = LoadingIndicator(classes="chat-loading")
+        chat_pane.mount(loading)
+        chat_pane.scroll_end()
 
         # Get or create agent for this session
         if session.id not in self.agents:
             self.agents[session.id] = REPLAgent(session=session)
 
         agent = self.agents[session.id]
-        streaming_handler = SessionStreamingHandler(session)
 
         # Callback to log code execution to REPL pane
         def on_execution(output: str, is_error: bool):
@@ -231,6 +260,16 @@ class MahtabApp(App):
                 session.log_llm_repl.info(output)
 
         try:
-            await agent.ask(prompt, streaming_handler=streaming_handler, on_execution=on_execution)
+            response = await agent.ask(prompt, streaming_handler=None, on_execution=on_execution)
+            # Remove loading, add response (without code blocks)
+            loading.remove()
+            text_only = strip_code_blocks(response)
+            if text_only:
+                assistant_msg = Markdown(text_only, classes="assistant-message")
+                chat_pane.mount(assistant_msg)
         except Exception as e:
-            session.log_llm_chat.error(f"[red]Error: {e}[/red]")
+            loading.remove()
+            error_msg = Static(f"[red]Error: {e}[/red]", classes="assistant-message", markup=True)
+            chat_pane.mount(error_msg)
+
+        chat_pane.scroll_end()
