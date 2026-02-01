@@ -68,9 +68,10 @@ class REPLWidget(Widget):
         self.session = session
 
     def compose(self):
-        with Horizontal():
-            yield RichLog(id="chat", wrap=True, markup=True)
-            yield RichLog(id="repl", wrap=True, markup=True)
+        yield Horizontal(
+            RichLog(id="chat", wrap=True, markup=True),
+            RichLog(id="repl", wrap=True, markup=True),
+        )
         yield TextArea(id="input", language="python")
 
     def on_mount(self):
