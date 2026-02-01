@@ -84,11 +84,12 @@ class DynamicPrompt:
             Tuple of (info_string, mode_indicator).
         """
         # Capture any new readline history entries (user input)
+        # Only log in repl mode - chat mode is logged by ask()
         current_len = readline.get_current_history_length()
         while self._last_history_len < current_len:
             self._last_history_len += 1
             item = readline.get_history_item(self._last_history_len)
-            if item and not item.startswith("ask("):
+            if item and not item.startswith("ask(") and self.input_mode == "repl":
                 self.log.info(item, extra={"tag": "user-repl-in"})
 
         parts = []
