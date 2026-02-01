@@ -1,6 +1,6 @@
 """Tests for LangGraph agent."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -208,3 +208,14 @@ def test_should_continue_incomplete_at_limit():
         "turn_count": 5,
     }
     assert should_continue(state, max_turns=5) == "end"
+
+
+def test_build_agent_graph_creates_graph():
+    from mahtab.agent.graph import build_agent_graph
+
+    mock_llm = MagicMock()
+    graph = build_agent_graph(llm=mock_llm, max_turns=3)
+
+    # Verify it's a compiled graph
+    assert hasattr(graph, "invoke")
+    assert hasattr(graph, "ainvoke")

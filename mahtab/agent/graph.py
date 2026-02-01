@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import json
 import re
-from typing import TYPE_CHECKING, TypedDict
+from typing import TypedDict
 
+from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
 
-if TYPE_CHECKING:
-    from langchain_core.messages import BaseMessage
-
-    from mahtab.core.state import SessionState
+from mahtab.core.state import SessionState
 
 
 class ReflectionResult(BaseModel):
@@ -206,3 +204,56 @@ def should_continue(state: AgentState, max_turns: int = 5) -> str:
 
     # Otherwise, continue
     return "generate"
+
+
+def build_agent_graph(llm, max_turns: int = 5):
+    """Build the agent StateGraph.
+
+    Args:
+        llm: Language model for generate and reflect nodes.
+        max_turns: Maximum generation turns before stopping.
+
+    Returns:
+        Compiled StateGraph.
+    """
+    from functools import partial
+
+    from langgraph.graph import END, StateGraph
+
+    graph = StateGraph(AgentState)
+
+    # Add nodes - wrap async nodes with llm dependency
+    async def _generate(state):
+        return await generate_node(state, llm)
+
+    async def _reflect(state):
+        return await reflect_node(state, llm)
+
+    graph.add_node("generate", _generate)
+    graph.add_node("extract_code", extract_code_node)
+    graph.add_node("execute", execute_node)
+    graph.add_node("reflect", _reflect)
+
+    # Set entry point
+    graph.set_entry_point("generate")
+
+    # Add edges
+    graph.add_edge("generate", "extract_code")
+
+    # Conditional: has code? -> execute or end
+    graph.add_conditional_edges(
+        "extract_code",
+        should_execute,
+        {"execute": "execute", "end": END},
+    )
+
+    graph.add_edge("execute", "reflect")
+
+    # Conditional: complete? -> end or generate
+    graph.add_conditional_edges(
+        "reflect",
+        partial(should_continue, max_turns=max_turns),
+        {"generate": "generate", "end": END},
+    )
+
+    return graph.compile()
