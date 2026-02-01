@@ -15,6 +15,17 @@ def session():
     return Session(store)
 
 
+class WidgetTestApp(App):
+    """Test app that wraps a REPLWidget for a given session."""
+
+    def __init__(self, session: Session):
+        super().__init__()
+        self._session = session
+
+    def compose(self):
+        yield REPLWidget(self._session)
+
+
 def test_repl_widget_has_session(session):
     widget = REPLWidget(session)
     assert widget.session is session
@@ -23,12 +34,7 @@ def test_repl_widget_has_session(session):
 @pytest.mark.asyncio
 async def test_repl_widget_has_output_panes(session):
     """Test that REPLWidget composes chat and repl RichLog panes."""
-
-    class TestApp(App):
-        def compose(self):
-            yield REPLWidget(session)
-
-    app = TestApp()
+    app = WidgetTestApp(session)
     async with app.run_test():
         chat = app.query_one("#chat", RichLog)
         repl = app.query_one("#repl", RichLog)
@@ -39,12 +45,42 @@ async def test_repl_widget_has_output_panes(session):
 @pytest.mark.asyncio
 async def test_repl_widget_has_input(session):
     """Test that REPLWidget composes an input TextArea."""
-
-    class TestApp(App):
-        def compose(self):
-            yield REPLWidget(session)
-
-    app = TestApp()
+    app = WidgetTestApp(session)
     async with app.run_test():
         input_widget = app.query_one("#input", TextArea)
         assert input_widget is not None
+
+
+@pytest.mark.asyncio
+async def test_repl_widget_logs_to_chat_pane(session):
+    app = WidgetTestApp(session)
+    async with app.run_test() as pilot:
+        # Wait for call_after_refresh to complete
+        await pilot.pause()
+        widget = app.query_one(REPLWidget)
+        session.log_user_chat.info("hello chat")
+        chat = widget.query_one("#chat", RichLog)
+        # RichLog stores lines internally
+        assert len(chat.lines) > 0
+
+
+@pytest.mark.asyncio
+async def test_repl_widget_logs_to_repl_pane(session):
+    app = WidgetTestApp(session)
+    async with app.run_test() as pilot:
+        # Wait for call_after_refresh to complete
+        await pilot.pause()
+        widget = app.query_one(REPLWidget)
+        session.log_user_repl.info(">>> x = 5")
+        repl = widget.query_one("#repl", RichLog)
+        assert len(repl.lines) > 0
+
+
+@pytest.mark.asyncio
+async def test_repl_widget_logs_to_store(session):
+    app = WidgetTestApp(session)
+    async with app.run_test() as pilot:
+        # Wait for call_after_refresh to complete
+        await pilot.pause()
+        session.log_user_chat.info("stored message")
+        assert b"stored message" in session.store.data

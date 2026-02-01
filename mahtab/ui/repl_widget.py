@@ -2,14 +2,29 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from textual.containers import Horizontal
 from textual.widget import Widget
 from textual.widgets import RichLog, TextArea
 
+from mahtab.ui.handlers import StoreHandler
+
 if TYPE_CHECKING:
     from mahtab.session import Session
+
+
+class RichLogHandler(logging.Handler):
+    """Sends log records to a RichLog widget."""
+
+    def __init__(self, widget: RichLog):
+        super().__init__()
+        self.widget = widget
+
+    def emit(self, record: logging.LogRecord) -> None:
+        msg = self.format(record)
+        self.widget.write(msg)
 
 
 class REPLWidget(Widget):
@@ -51,3 +66,37 @@ class REPLWidget(Widget):
             yield RichLog(id="chat", wrap=True, markup=True)
             yield RichLog(id="repl", wrap=True, markup=True)
         yield TextArea(id="input", language="python")
+
+    def on_mount(self):
+        self.call_after_refresh(self._setup_handlers)
+
+    def _setup_handlers(self):
+        chat = self.query_one("#chat", RichLog)
+        repl = self.query_one("#repl", RichLog)
+
+        # Chat pane gets user and LLM chat
+        chat_handler = RichLogHandler(chat)
+        chat_handler.setFormatter(logging.Formatter("%(message)s"))
+        self.session.log_user_chat.addHandler(chat_handler)
+        self.session.log_llm_chat.addHandler(chat_handler)
+        self.session.log_user_chat.setLevel(logging.INFO)
+        self.session.log_llm_chat.setLevel(logging.INFO)
+
+        # REPL pane gets user and LLM repl
+        repl_handler = RichLogHandler(repl)
+        repl_handler.setFormatter(logging.Formatter("%(message)s"))
+        self.session.log_user_repl.addHandler(repl_handler)
+        self.session.log_llm_repl.addHandler(repl_handler)
+        self.session.log_user_repl.setLevel(logging.INFO)
+        self.session.log_llm_repl.setLevel(logging.INFO)
+
+        # Store gets everything
+        store_handler = StoreHandler(self.session.store)
+        store_handler.setFormatter(logging.Formatter("[%(name)s] %(message)s"))
+        for logger in [
+            self.session.log_user_chat,
+            self.session.log_llm_chat,
+            self.session.log_user_repl,
+            self.session.log_llm_repl,
+        ]:
+            logger.addHandler(store_handler)
