@@ -49,8 +49,8 @@ ignore = [
 known-first-party = ["mahtab"]
 
 [tool.pylint.main]
-load-plugins = ["lint.no_mocking"]
+load-plugins = ["lint.no_pointless_imports"]
 
 [tool.pylint."messages control"]
-enable = ["no-mocking"]
+enable = ["no-type-checking", "no-future-imports"]
 disable = ["all"]

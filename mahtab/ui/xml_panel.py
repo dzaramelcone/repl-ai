@@ -1,7 +1,5 @@
 """Live XML panel for streaming display."""
 
-from __future__ import annotations
-
 import xml.etree.ElementTree as ET
 
 from rich.console import Console

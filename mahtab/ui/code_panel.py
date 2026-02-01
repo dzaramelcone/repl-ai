@@ -1,7 +1,5 @@
 """Live code panel for streaming display."""
 
-from __future__ import annotations
-
 import time
 
 from rich.console import Console

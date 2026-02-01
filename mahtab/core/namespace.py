@@ -1,14 +1,10 @@
 """Namespace management utilities."""
 
-from __future__ import annotations
-
 import importlib
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from mahtab.core.state import SessionState
+from mahtab.core.state import SessionState
 
 
 def init_namespace(session: SessionState, globals_dict: dict, locals_dict: dict) -> None:

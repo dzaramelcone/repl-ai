@@ -1,7 +1,5 @@
 """Panel rendering utilities for code and output display."""
 
-from __future__ import annotations
-
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax

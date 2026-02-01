@@ -1,7 +1,5 @@
 """Interactive REPL implementation."""
 
-from __future__ import annotations
-
 import asyncio
 import code
 import os
@@ -12,7 +10,7 @@ import sys
 
 from mahtab.agent.repl_agent import create_repl_agent
 from mahtab.core.state import SessionState
-from mahtab.io import MemoryStore, setup_logging
+from mahtab.io import MemoryStore, Tag, setup_logging
 from mahtab.rlm.search import rlm
 from mahtab.tools.files import create_file, open_in_editor, read_file
 from mahtab.tools.skills import load_claude_sessions, load_skill
@@ -323,7 +321,7 @@ def run_repl(ns: dict) -> None:
         """Load a skill."""
         return load_skill.invoke({"name": name, "args": args, "skills_dir": session.skills_dir})
 
-    def records(tag: str) -> None:
+    def records(tag: Tag) -> None:
         """Show all raw XML records with the given tag.
 
         Args:

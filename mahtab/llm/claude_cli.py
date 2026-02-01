@@ -1,7 +1,5 @@
 """Custom LangChain chat model that calls Claude via the CLI subprocess."""
 
-from __future__ import annotations
-
 import asyncio
 import json
 from collections.abc import AsyncIterator, Iterator

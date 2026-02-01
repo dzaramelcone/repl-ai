@@ -1,7 +1,5 @@
 """Tests for interactive REPL module."""
 
-from __future__ import annotations
-
 import pytest
 
 from mahtab.core.state import SessionState

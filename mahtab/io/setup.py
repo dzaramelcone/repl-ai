@@ -1,17 +1,11 @@
 """Logger setup and wiring."""
 
-from __future__ import annotations
-
 import logging
-from typing import TYPE_CHECKING
 
 from mahtab.io.filters import TagFilter
-from mahtab.io.handlers import DisplayHandler, PromptHandler, StoreHandler
+from mahtab.io.handlers import DisplayHandler, PromptHandler, Store, StoreHandler
 from mahtab.io.tags import COMPLETE_TAGS, STREAM_TAGS
 from mahtab.ui.console import console
-
-if TYPE_CHECKING:
-    from mahtab.io.handlers import Store
 
 
 def setup_logging(store: Store) -> tuple[logging.Logger, PromptHandler]:

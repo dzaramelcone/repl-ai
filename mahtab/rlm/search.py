@@ -3,8 +3,6 @@
 The LLM writes code to explore large contexts by using peek/grep/partition/rlm tools.
 """
 
-from __future__ import annotations
-
 import re
 import traceback
 from typing import Any

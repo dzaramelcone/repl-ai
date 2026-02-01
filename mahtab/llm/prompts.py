@@ -1,7 +1,5 @@
 """System prompts and prompt templates for the REPL agent."""
 
-from __future__ import annotations
-
 from langchain_core.prompts import SystemMessagePromptTemplate
 
 # Main REPL system prompt template

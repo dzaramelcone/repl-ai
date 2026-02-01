@@ -1,7 +1,5 @@
 """In-memory message store."""
 
-from __future__ import annotations
-
 
 class MemoryStore:
     """Simple in-memory byte store."""

@@ -3,8 +3,6 @@
 These tools are shared between the main REPL and the RLM search algorithm.
 """
 
-from __future__ import annotations
-
 import re
 
 from langchain_core.tools import tool

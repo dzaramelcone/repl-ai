@@ -1,18 +1,14 @@
 """Logging handlers for message routing."""
 
-from __future__ import annotations
-
 import logging
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
+from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 
 from mahtab.io.formatters import BytesFormatter, RichFormatter, XMLFormatter
 from mahtab.ui.streaming import StreamingHandler
-
-if TYPE_CHECKING:
-    from rich.console import Console
 
 
 class Store(Protocol):

@@ -1,12 +1,9 @@
 """Code execution utilities with output limiting."""
 
-from __future__ import annotations
-
 import sys
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from mahtab.core.state import SessionState
+from mahtab.core.state import SessionState
 
 
 class LimitedOutput:

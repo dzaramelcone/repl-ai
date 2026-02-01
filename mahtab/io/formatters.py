@@ -1,7 +1,5 @@
 """Logging formatters for different output targets."""
 
-from __future__ import annotations
-
 import logging
 
 

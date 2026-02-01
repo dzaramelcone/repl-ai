@@ -1,7 +1,5 @@
 """Buffer parsing utilities for streaming output."""
 
-from __future__ import annotations
-
 import re
 
 

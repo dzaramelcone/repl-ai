@@ -1,7 +1,5 @@
 """LangGraph-based agent implementation."""
 
-from __future__ import annotations
-
 import re
 from collections.abc import Callable
 from typing import TypedDict

@@ -35,3 +35,10 @@ repos:
         language: system
         types: [python]
         pass_filenames: true
+
+      - id: pylint-pointless-imports
+        name: pylint no pointless imports
+        entry: env PYTHONPATH=. uv run pylint --disable=all --enable=no-type-checking,no-future-imports
+        language: system
+        types: [python]
+        pass_filenames: true

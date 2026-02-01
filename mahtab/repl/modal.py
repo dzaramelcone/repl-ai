@@ -1,7 +1,5 @@
 """Modal REPL implementation with backtick mode switching."""
 
-from __future__ import annotations
-
 import code as code_module
 import readline
 import rlcompleter

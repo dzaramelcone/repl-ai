@@ -1,7 +1,5 @@
 """Rich console utilities and singleton."""
 
-from __future__ import annotations
-
 from rich.console import Console
 
 # Global console instance
