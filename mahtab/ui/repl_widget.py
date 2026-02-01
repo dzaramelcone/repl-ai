@@ -35,24 +35,30 @@ class REPLWidget(Widget):
         layout: grid;
         grid-size: 1 2;
         grid-rows: 1fr auto;
+        height: 100%;
+        width: 100%;
     }
 
     REPLWidget Horizontal {
         height: 1fr;
+        width: 100%;
     }
 
     REPLWidget #chat {
         width: 1fr;
+        height: 100%;
         border: solid $primary;
     }
 
     REPLWidget #repl {
         width: 1fr;
+        height: 100%;
         border: solid $secondary;
     }
 
     REPLWidget #input {
         height: 5;
+        width: 100%;
         border: solid $accent;
     }
     """

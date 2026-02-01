@@ -16,6 +16,13 @@ class MahtabApp(App):
     CSS = """
     #sessions {
         height: 1fr;
+        width: 100%;
+    }
+
+    TabPane {
+        height: 100%;
+        width: 100%;
+        padding: 0;
     }
     """
 
