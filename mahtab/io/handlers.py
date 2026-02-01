@@ -63,6 +63,9 @@ class DisplayHandler(logging.Handler):
             case "assistant-chat" | "assistant-repl-in" | "assistant-repl-out":
                 # Skip - already shown during streaming / on_execution callback
                 pass
+            case "user-repl-in" | "user-repl-out":
+                # Skip - already visible in REPL
+                pass
             case "user-chat":
                 md = Markdown(record.getMessage())
                 panel = Panel(md, title="[bold green]You[/]", border_style="green")

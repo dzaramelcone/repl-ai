@@ -30,26 +30,38 @@ class TestDynamicPromptInputMode:
         assert prompt.input_mode == "chat"
 
     def test_str_shows_filled_diamond_in_repl_mode(self, prompt):
-        """REPL mode should show filled cyan diamond."""
+        """REPL mode should show filled diamond and py label."""
         prompt.input_mode = "repl"
         result = str(prompt)
-        # Should contain cyan filled diamond
-        assert "\033[36m" in result  # cyan
         assert "◈" in result  # filled diamond
+        assert "py" in result
 
     def test_str_shows_hollow_diamond_in_chat_mode(self, prompt):
-        """CHAT mode should show green hollow diamond."""
+        """CHAT mode should show hollow diamond and ai label."""
         prompt.input_mode = "chat"
         result = str(prompt)
-        # Should contain green hollow diamond
-        assert "\033[32m" in result  # green
         assert "◇" in result  # hollow diamond
+        assert "ai" in result
 
     def test_str_does_not_show_filled_diamond_in_chat_mode(self, prompt):
         """CHAT mode should NOT show filled diamond."""
         prompt.input_mode = "chat"
         result = str(prompt)
         assert "◈" not in result
+
+    def test_get_prompt_parts_has_rich_markup_in_repl_mode(self, prompt):
+        """get_prompt_parts should return Rich markup for repl mode."""
+        prompt.input_mode = "repl"
+        info, mode = prompt.get_prompt_parts()
+        assert "[cyan]" in mode
+        assert "◈ py" in mode
+
+    def test_get_prompt_parts_has_rich_markup_in_chat_mode(self, prompt):
+        """get_prompt_parts should return Rich markup for chat mode."""
+        prompt.input_mode = "chat"
+        info, mode = prompt.get_prompt_parts()
+        assert "[green]" in mode
+        assert "◇ ai" in mode
 
 
 class TestToggleMode:
@@ -246,75 +258,34 @@ class TestDynamicPromptFormatting:
     def test_prompt_cost_shows_full_value(self, prompt_with_usage):
         """Prompt cost should show the full numeric value, not truncated."""
         result = str(prompt_with_usage)
-        import re
-
-        # Strip ANSI codes
-        clean = re.sub(r"\x01?\x1b\[[0-9;]*m\x02?", "", result)
         # Should show $0.04, not $0. or partial
-        assert re.search(r"\$0\.04", clean), f"Expected $0.04 in '{clean}'"
-
-    def test_prompt_ansi_escapes_properly_wrapped_for_readline(self, prompt_with_history):
-        """All ANSI escape sequences must be wrapped in \\x01...\\x02 for readline."""
-        result = str(prompt_with_history)
-
-        # Every ANSI escape (\x1b[...m) must be preceded by \x01 and followed by \x02
-        # This is required for readline to correctly calculate prompt display width
-        import re
-
-        # Find all ANSI escape sequences
-        ansi_pattern = r"\x1b\[[0-9;]*m"
-
-        # Check that each ANSI escape is wrapped
-        # Pattern: \x01 followed by ANSI escape followed by \x02
-        wrapped_pattern = r"\x01\x1b\[[0-9;]*m\x02"
-
-        # Count total ANSI escapes
-        total_ansi = len(re.findall(ansi_pattern, result))
-        # Count properly wrapped ANSI escapes
-        wrapped_ansi = len(re.findall(wrapped_pattern, result))
-
-        assert total_ansi == wrapped_ansi, (
-            f"Found {total_ansi} ANSI escapes but only {wrapped_ansi} properly wrapped. "
-            f"Unwrapped escapes cause readline to miscalculate prompt length."
-        )
-
-    def test_prompt_no_nested_readline_markers(self, prompt_with_history):
-        """Readline markers (\\x01...\\x02) must not be nested."""
-        result = str(prompt_with_history)
-
-        # Walk through string tracking nesting depth
-        depth = 0
-        for i, char in enumerate(result):
-            if char == "\x01":
-                depth += 1
-                assert depth == 1, f"Nested \\x01 at position {i}: {repr(result[max(0, i - 5) : i + 10])}"
-            elif char == "\x02":
-                assert depth == 1, f"Unexpected \\x02 at position {i} with depth {depth}"
-                depth = 0
-
-        assert depth == 0, "Unclosed \\x01 marker"
+        assert "$0.04" in result, f"Expected $0.04 in '{result}'"
 
     def test_prompt_format_order(self, prompt_with_usage):
-        """Prompt should show elements in order: memory, hist, cost, mode indicator."""
+        """Prompt should show elements in order: memory, cost, mode indicator."""
         result = str(prompt_with_usage)
-        import re
-
-        # Strip ANSI codes
-        clean = re.sub(r"\x01?\x1b\[[0-9;]*m\x02?", "", result)
 
         # Find positions of key elements
-        mb_pos = clean.find("MB")
-        cost_pos = clean.find("$")
-        mode_pos = clean.find("◈") if "◈" in clean else clean.find("◇")
+        mb_pos = result.find("MB")
+        cost_pos = result.find("$")
+        mode_pos = result.find("◈") if "◈" in result else result.find("◇")
 
         # Memory should come first, then cost, then mode indicator
-        assert mb_pos >= 0, f"Missing MB in prompt: {clean}"
-        assert cost_pos >= 0, f"Missing $ in prompt: {clean}"
-        assert mode_pos >= 0, f"Missing mode indicator in prompt: {clean}"
+        assert mb_pos >= 0, f"Missing MB in prompt: {result}"
+        assert cost_pos >= 0, f"Missing $ in prompt: {result}"
+        assert mode_pos >= 0, f"Missing mode indicator in prompt: {result}"
         assert mb_pos < cost_pos < mode_pos, (
             f"Wrong order in prompt. Expected MB < $ < mode, "
-            f"got positions {mb_pos}, {cost_pos}, {mode_pos} in '{clean}'"
+            f"got positions {mb_pos}, {cost_pos}, {mode_pos} in '{result}'"
         )
+
+    def test_get_prompt_parts_returns_rich_markup(self, prompt_with_usage):
+        """get_prompt_parts should return Rich markup for colors."""
+        info, mode = prompt_with_usage.get_prompt_parts()
+        # Info should have bright_blue markup for numbers
+        assert "[bright_blue]" in info
+        # Mode should have color markup
+        assert "[cyan]" in mode or "[green]" in mode
 
 
 class TestExitIntegration:

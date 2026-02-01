@@ -19,13 +19,6 @@ from mahtab.ui.console import console
 from mahtab.ui.panels import print_banner, print_output_panel, print_usage_panel
 from mahtab.ui.streaming import StreamingHandler
 
-# ANSI codes for prompt - wrapped in \001 \002 for readline length calculation
-NUM = "\001\033[38;5;117m\002"  # bright blue-ish
-DIM = "\001\033[38;5;242m\002"  # grey
-RESET = "\001\033[0m\002"
-CYAN = "\001\033[36m\002"
-GREEN = "\001\033[32m\002"
-
 
 def _approx_tokens(text: str) -> int:
     """Rough token estimate: ~4 chars per token."""
@@ -60,14 +53,14 @@ def should_route_to_chat(text: str, mode: str) -> bool:
 
 
 def _format_tokens(n: int) -> str:
-    """Format token count with units."""
+    """Format token count with units using Rich markup."""
     if n >= 1_000_000_000:
-        return f"{NUM}{n / 1_000_000_000:.1f}{DIM}Gt"
+        return f"[bright_blue]{n / 1_000_000_000:.1f}[/][dim]Gt[/]"
     elif n >= 1_000_000:
-        return f"{NUM}{n / 1_000_000:.1f}{DIM}Mt"
+        return f"[bright_blue]{n / 1_000_000:.1f}[/][dim]Mt[/]"
     elif n >= 1_000:
-        return f"{NUM}{n / 1_000:.1f}{DIM}kt"
-    return f"{NUM}{n}{DIM}t"
+        return f"[bright_blue]{n / 1_000:.1f}[/][dim]kt[/]"
+    return f"[bright_blue]{n}[/][dim]t[/]"
 
 
 class DynamicPrompt:
@@ -84,7 +77,12 @@ class DynamicPrompt:
         """Toggle between REPL and CHAT modes."""
         self.input_mode = "chat" if self.input_mode == "repl" else "repl"
 
-    def __str__(self) -> str:
+    def get_prompt_parts(self) -> tuple[str, str]:
+        """Get prompt info and mode indicator as Rich markup.
+
+        Returns:
+            Tuple of (info_string, mode_indicator).
+        """
         # Capture any new readline history entries (user input)
         current_len = readline.get_current_history_length()
         while self._last_history_len < current_len:
@@ -99,13 +97,13 @@ class DynamicPrompt:
         import resource
 
         mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024
-        parts.append(f"{NUM}{mem_mb:.0f}{DIM}MB")
+        parts.append(f"[bright_blue]{mem_mb:.0f}[/][dim]MB[/]")
 
         # Context size (if 'context' var exists)
         ctx = self.ns.get("context")
         if ctx and isinstance(ctx, str) and len(ctx) > 0:
             toks = _approx_tokens(ctx)
-            parts.append(f"{DIM}ctx:{_format_tokens(toks)}")
+            parts.append(f"[dim]ctx:[/]{_format_tokens(toks)}")
 
         # History size
         if self.session.messages:
@@ -116,14 +114,24 @@ class DynamicPrompt:
         # Usage stats (cost)
         if self.session.usage.num_calls > 0:
             cost = self.session.usage.total_cost_usd
-            parts.append(f"{DIM}${NUM}{cost:.2f}{RESET}")
+            parts.append(f"[dim]$[/][bright_blue]{cost:.2f}[/]")
 
         info = " ".join(parts)
         if self.input_mode == "chat":
-            mode_indicator = f"{GREEN}◇ ai{RESET}"
+            mode_indicator = "[green]◇ ai[/]"
         else:
-            mode_indicator = f"{CYAN}◈ py{RESET}"
-        return f"{info}{RESET} {mode_indicator} " if info else f"{mode_indicator} "
+            mode_indicator = "[cyan]◈ py[/]"
+        return info, mode_indicator
+
+    def __str__(self) -> str:
+        """Return plain prompt for input() - colors handled separately."""
+        info, mode = self.get_prompt_parts()
+        # Strip Rich markup for plain prompt
+        import re
+
+        plain_info = re.sub(r"\[/?[^\]]+\]", "", info)
+        plain_mode = re.sub(r"\[/?[^\]]+\]", "", mode)
+        return f"{plain_info} {plain_mode} " if plain_info else f"{plain_mode} "
 
 
 class InteractiveREPL(code.InteractiveConsole):
@@ -208,10 +216,14 @@ class InteractiveREPL(code.InteractiveConsole):
         while True:
             try:
                 if more:
-                    prompt = sys.ps2
+                    console.print("[dim]⋮[/] ", end="")
                 else:
-                    prompt = str(self.prompt_obj)
-                line = input(prompt)
+                    info, mode = self.prompt_obj.get_prompt_parts()
+                    if info:
+                        console.print(f"{info} {mode} ", end="")
+                    else:
+                        console.print(f"{mode} ", end="")
+                line = input()
                 more = self.push(line)
             except KeyboardInterrupt:
                 console.print("\n[dim]KeyboardInterrupt[/]")
@@ -280,7 +292,6 @@ def run_repl(ns: dict) -> None:
             sys.stdout.write("\n\033[33m[cancelled]\033[0m\n")
             sys.stdout.flush()
             prompt_handler.clear()
-            print("\033[0m", end="", flush=True)
             return
 
         # Record usage stats
@@ -294,7 +305,6 @@ def run_repl(ns: dict) -> None:
         )
 
         prompt_handler.clear()
-        print("\033[0m", end="", flush=True)
 
     def clear() -> None:
         """Clear conversation history."""
@@ -391,8 +401,6 @@ def run_repl(ns: dict) -> None:
 
     # Set up prompts
     prompt_obj = DynamicPrompt(session, ns, log)
-    sys.ps1 = prompt_obj
-    sys.ps2 = "\033[2m⋮\033[0m "
 
     # Print banner
     print_banner(console=console)
