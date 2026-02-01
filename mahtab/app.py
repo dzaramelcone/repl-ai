@@ -188,8 +188,12 @@ class MahtabApp(App):
         pane = TabPane(label, content, id=f"tab-{session.id}")
         tabs.add_pane(pane)
 
-        # Wire handlers after mount
-        self.call_after_refresh(lambda: self._wire_session_handlers(session))
+        # Wire handlers and focus input after mount
+        def after_mount():
+            self._wire_session_handlers(session)
+            self.query_one(f"#input-{session.id}", TextArea).focus()
+
+        self.call_after_refresh(after_mount)
 
         return session
 
@@ -199,7 +203,12 @@ class MahtabApp(App):
     def action_close_session(self):
         tabs = self.query_one("#sessions", TabbedContent)
         if len(tabs._tab_content) > 1:
-            tabs.remove_pane(tabs.active)
+            active_tab_id = tabs.active
+            if active_tab_id and active_tab_id.startswith("tab-"):
+                session_id = active_tab_id[4:]
+                self.sessions.pop(session_id, None)
+                self.agents.pop(session_id, None)
+            tabs.remove_pane(active_tab_id)
 
     def action_next_tab(self):
         tabs = self.query_one("#sessions", TabbedContent)
