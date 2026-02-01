@@ -1,6 +1,9 @@
 """Tests for response parsing."""
 
-from mahtab.io.parser import parse_response
+import logging
+
+from mahtab.io.handlers import PromptHandler
+from mahtab.io.parser import parse_response, route_response
 
 
 def test_parse_response_extracts_chat():
@@ -29,3 +32,20 @@ def test_parse_response_multiline_content():
     return 42</assistant-repl-in>"""
     result = parse_response(response)
     assert result == [("assistant-repl-in", "def foo():\n    return 42")]
+
+
+def test_route_response_sends_to_logger():
+    # Set up logger with prompt handler
+    log = logging.getLogger("mahtab")
+    log.setLevel(logging.INFO)
+    handler = PromptHandler()
+    log.addHandler(handler)
+
+    try:
+        response = "<assistant-chat>Hello!</assistant-chat>"
+        route_response(response)
+
+        context = handler.get_context()
+        assert "<assistant-chat>Hello!</assistant-chat>" in context
+    finally:
+        log.removeHandler(handler)
