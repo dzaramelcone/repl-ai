@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
+
 from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
+from rich.pretty import Pretty
+
+
+def _xml_to_dict(element: ET.Element) -> dict | str:
+    """Convert XML element to dict recursively."""
+    children = list(element)
+    if not children:
+        return element.text.strip() if element.text else ""
+    return {child.tag: _xml_to_dict(child) for child in children}
 
 
 class XmlPanel:
@@ -16,11 +27,24 @@ class XmlPanel:
         self._tag = ""
         self._buffer = ""
 
+    def _format_content(self, content: str, done: bool) -> Pretty | str:
+        """Format content as pretty dict if valid XML, else raw text."""
+        if not done:
+            return content.strip() or " "
+        try:
+            xml_str = f"<{self._tag}>{content}</{self._tag}>"
+            root = ET.fromstring(xml_str)
+            data = _xml_to_dict(root)
+            return Pretty(data, indent_guides=True, expand_all=True)
+        except ET.ParseError:
+            return content.strip() or " "
+
     def _make_panel(self, done: bool) -> Panel:
         """Create a panel for display."""
         title = f"[bold magenta]{self._tag}[/]" if done else f"[dim magenta]{self._tag}[/]"
         border = "magenta" if done else "dim"
-        return Panel(self._buffer.strip() or " ", title=title, border_style=border)
+        content = self._format_content(self._buffer, done)
+        return Panel(content, title=title, border_style=border)
 
     def start(self, tag: str) -> None:
         """Start the live XML panel."""
