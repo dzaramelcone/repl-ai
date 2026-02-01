@@ -11,7 +11,7 @@ REPL_SYSTEM_TEMPLATE = """You're in a shared Python REPL with the user. You can 
 
 To search through past conversations, use:
   sessions = load_claude_sessions()  # Load all ~/.claude/projects/*.jsonl
-  grep(sessions, "pattern")          # Find relevant lines
+  rlm(prompt, sessions)              # Recursive LLM search
 
 Available variables:
 {var_summary}
@@ -141,4 +141,57 @@ def build_rlm_iteration_prompt(
         context_size=context_size,
         depth=depth,
         history=history_str,
+    )
+
+
+# Reflection prompt for evaluating code execution
+REFLECTION_PROMPT_TEMPLATE = """Evaluate whether the code execution satisfied the user's request.
+
+## Original Request
+{original_prompt}
+
+## Code Executed
+{code_blocks}
+
+## Execution Output
+{execution_results}
+
+## Instructions
+Evaluate:
+1. CORRECTNESS: Did the code run without errors? If there were errors, are they blocking the task?
+2. COMPLETENESS: Does the output satisfy what the user asked for?
+
+Respond with ONLY valid JSON (no markdown, no explanation):
+{{"is_complete": true/false, "reasoning": "brief explanation", "next_action": "what to do next" or null}}"""
+
+
+def build_reflection_prompt(
+    original_prompt: str,
+    code_blocks: list[str],
+    execution_results: list[tuple[str, bool]],
+) -> str:
+    """Build the prompt for reflection evaluation.
+
+    Args:
+        original_prompt: The user's original request.
+        code_blocks: List of code blocks that were executed.
+        execution_results: List of (output, is_error) tuples.
+
+    Returns:
+        Formatted reflection prompt string.
+    """
+    # Format code blocks
+    code_str = "\n\n".join(f"```python\n{block}\n```" for block in code_blocks)
+
+    # Format execution results with error markers
+    results_parts = []
+    for i, (output, is_error) in enumerate(execution_results, 1):
+        status = "[ERROR]" if is_error else "[OK]"
+        results_parts.append(f"Block {i} {status}:\n{output}")
+    results_str = "\n\n".join(results_parts)
+
+    return REFLECTION_PROMPT_TEMPLATE.format(
+        original_prompt=original_prompt,
+        code_blocks=code_str,
+        execution_results=results_str,
     )
