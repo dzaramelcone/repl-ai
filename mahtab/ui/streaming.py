@@ -6,6 +6,7 @@ import sys
 import time
 from typing import TYPE_CHECKING
 
+from langchain_core.callbacks import BaseCallbackHandler
 from rich.live import Live
 from rich.panel import Panel
 from rich.spinner import Spinner
@@ -17,7 +18,7 @@ if TYPE_CHECKING:
     from rich.console import Console
 
 
-class StreamingHandler:
+class StreamingHandler(BaseCallbackHandler):
     """Handles streaming output with code panel detection.
 
     This class manages the streaming output experience including:
@@ -31,6 +32,7 @@ class StreamingHandler:
     """
 
     def __init__(self, console: Console | None = None, chars_per_second: float = 200.0):
+        super().__init__()
         self.console = console or default_console
         self.chars_per_second = chars_per_second
 
@@ -176,3 +178,17 @@ class StreamingHandler:
         if self._code_live:
             self._code_live.stop()
             self._code_live = None
+
+    # LangChain callback interface
+    def on_llm_new_token(self, token: str, **_kwargs) -> None:
+        """Called by LangChain when a new token is generated."""
+        self.process_token(token)
+
+    def on_llm_start(self, _serialized, _prompts, **_kwargs) -> None:
+        """Called by LangChain when LLM starts generating."""
+        self.start_spinner()
+
+    def on_llm_end(self, _response, **_kwargs) -> None:
+        """Called by LangChain when LLM finishes generating."""
+        self.flush()
+        self.stop_spinner()
