@@ -1,11 +1,12 @@
-"""Main entry point for running mahtab as a module.
+"""Entry point for mahtab."""
 
-Usage:
-    python -m mahtab
-    uv run python -i -m mahtab
-"""
+from mahtab.app import MahtabApp
 
-from mahtab.repl.interactive import run_repl
 
-# Run the REPL setup when module is executed
-run_repl()
+def main():
+    app = MahtabApp()
+    app.run()
+
+
+if __name__ == "__main__":
+    main()

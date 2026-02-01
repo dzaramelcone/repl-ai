@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mahtab = "mahtab.repl.interactive:run_repl"
+mahtab = "mahtab.__main__:main"
 
 [dependency-groups]
 dev = [
