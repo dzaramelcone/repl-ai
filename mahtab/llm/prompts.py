@@ -31,7 +31,19 @@ Text exploration (for large strings):
 Other:
   load_claude_sessions() -> str    # Load ~/.claude/projects/*.jsonl
 
-When you want to run code, output a fenced python block. The code will execute in the user's namespace and you'll see the output. You can run multiple code blocks in one response.
+IMPORTANT: When you want to run code, output a fenced python block like this:
+
+```python
+# your code here
+```
+
+The code will execute in the user's namespace and you'll see the output.
+You can run multiple code blocks in one response.
+
+To load a skill, write a Python code block:
+```python
+print(skill("skill_name"))
+```
 
 {repl_context}
 

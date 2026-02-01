@@ -113,8 +113,14 @@ def run_repl(ns: dict | None = None) -> None:
     streaming_handler = StreamingHandler(console=console)
 
     # Create wrapper functions for the namespace
-    def ask(prompt: str = "", max_turns: int = 5) -> None:
-        """Ask Claude something. Claude can execute code in your namespace."""
+    def ask(prompt: str = "", max_turns: int = 5, use_graph: bool = True) -> None:
+        """Ask Claude something. Claude can execute code in your namespace.
+
+        Args:
+            prompt: Your question or request.
+            max_turns: Maximum conversation turns.
+            use_graph: Use LangGraph-based agent (True) or legacy (False).
+        """
         try:
 
             async def run_ask():
@@ -125,69 +131,46 @@ def run_repl(ns: dict | None = None) -> None:
                 from mahtab.llm.prompts import build_repl_system_prompt
                 from mahtab.tools.skills import load_skill_descriptions
 
-                system_prompt = build_repl_system_prompt(
-                    var_summary=session.summarize_namespace(),
-                    skills_description=load_skill_descriptions(session.skills_dir),
-                    repl_context=session.get_activity_context(),
-                    prior_session=session.load_last_session(),
-                )
+                # Update agent max_turns if different
+                if agent.max_turns != max_turns:
+                    agent.max_turns = max_turns
+                    agent.graph = None  # Reset graph to pick up new max_turns
 
-                session.add_user_message(prompt)
+                # Reset streaming handler state and start spinner
+                streaming_handler.reset()
+                streaming_handler.start_spinner()
 
-                for _ in range(max_turns):
-                    messages = [SystemMessage(content=system_prompt), *session.messages]
+                def on_token(token: str) -> None:
+                    streaming_handler.process_token(token)
 
-                    # Reset streaming handler state and start spinner
-                    streaming_handler.reset()
-                    streaming_handler.start_spinner()
+                def on_tool_call(tool_name: str, tool_input: dict) -> None:
+                    # Show skill loading in the console
+                    if tool_name == "load_skill":
+                        skill_name = tool_input.get("name", "unknown")
+                        console.print(f"[dim]Loading skill: {skill_name}[/]")
 
-                    response_text = ""
-                    async for chunk in agent.llm.astream(messages):
-                        token = chunk.content
-                        if token:
-                            response_text += token
-                            streaming_handler.process_token(token)
+                def on_execution(output: str, is_error: bool, idx: int) -> None:
+                    print_output_panel(output, is_error)
 
-                        # Check for usage in response_metadata (LangChain's standard location)
-                        metadata = getattr(chunk, "response_metadata", {}) or {}
-                        usage = metadata.get("usage", {})
-                        if usage:
-                            session.usage.record(
-                                cost=metadata.get("total_cost_usd", 0),
-                                input_tokens=usage.get("input_tokens", 0),
-                                output_tokens=usage.get("output_tokens", 0),
-                                cache_read=usage.get("cache_read_input_tokens", 0),
-                                cache_create=usage.get("cache_creation_input_tokens", 0),
-                            )
-
-                    # Flush any remaining text and ensure spinner is stopped
-                    streaming_handler.flush()
-                    streaming_handler.stop_spinner()
-
-                    # Extract and execute code blocks
-                    code_blocks = re.findall(r"```python\n(.*?)```", response_text, re.DOTALL)
-
-                    if not code_blocks:
-                        session.add_assistant_message(response_text)
-                        session.save_last_session(prompt, response_text)
-                        return
-
-                    # Execute code blocks
-                    outputs = []
-                    for block in code_blocks:
-                        block = block.strip()
-                        output, is_error = execute_code(block, session)
-                        outputs.append(output)
-                        print_output_panel(output, is_error)
-
-                    session.add_assistant_message(response_text)
-
-                    exec_report = "\n\n".join(
-                        f"Code block {i + 1} output:\n{out}" for i, out in enumerate(outputs)
+                if use_graph:
+                    # Use LangGraph-based agent
+                    await agent.ask(
+                        prompt,
+                        on_token=on_token,
+                        on_tool_call=on_tool_call,
+                        on_execution=on_execution,
                     )
-                    session.messages.append(HumanMessage(content=f"<execution>\n{exec_report}\n</execution>"))
+                else:
+                    # Use legacy implementation
+                    await agent.ask_legacy(
+                        prompt,
+                        on_token=on_token,
+                        on_execution=on_execution,
+                    )
 
-                console.print(f"[yellow]⚠ Max turns ({max_turns}) reached.[/]")
+                # Flush any remaining text and ensure spinner is stopped
+                streaming_handler.flush()
+                streaming_handler.stop_spinner()
 
             asyncio.run(run_ask())
 
