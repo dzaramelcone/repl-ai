@@ -9,6 +9,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from textual.app import App
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.message import Message
 from textual.widgets import (
     Footer,
     Header,
@@ -25,6 +26,27 @@ from mahtab.agent.repl_agent import REPLAgent
 from mahtab.session import Session
 from mahtab.store import Store
 from mahtab.ui.handlers import StoreHandler
+
+
+class InputArea(TextArea):
+    """TextArea that posts Submit message on Enter."""
+
+    class Submit(Message):
+        """Posted when user presses Enter."""
+
+        def __init__(self, text: str, input_id: str) -> None:
+            super().__init__()
+            self.text = text
+            self.input_id = input_id
+
+    def _on_key(self, event) -> None:
+        if event.key == "enter":
+            self.post_message(self.Submit(self.text, self.id or ""))
+            self.clear()
+            event.prevent_default()
+            event.stop()
+        else:
+            super()._on_key(event)
 
 
 def strip_code_blocks(text: str) -> str:
@@ -135,7 +157,7 @@ class MahtabApp(App):
                         VerticalScroll(id=f"chat-{session.id}", classes="chat-pane"),
                         RichLog(id=f"repl-{session.id}", classes="repl-pane", wrap=True, markup=True),
                     ),
-                    TextArea(id=f"input-{session.id}", classes="input-area", language="python"),
+                    InputArea(id=f"input-{session.id}", classes="input-area", language="python"),
                     classes="session-content",
                 )
         yield Footer()
@@ -145,7 +167,7 @@ class MahtabApp(App):
         for session in self.sessions.values():
             self._wire_session_handlers(session)
             # Focus the input
-            self.query_one(f"#input-{session.id}", TextArea).focus()
+            self.query_one(f"#input-{session.id}", InputArea).focus()
 
     def _wire_session_handlers(self, session: Session):
         """Wire logging handlers for a session's widgets."""
@@ -182,7 +204,7 @@ class MahtabApp(App):
                 VerticalScroll(id=f"chat-{session.id}", classes="chat-pane"),
                 RichLog(id=f"repl-{session.id}", classes="repl-pane", wrap=True, markup=True),
             ),
-            TextArea(id=f"input-{session.id}", classes="input-area", language="python"),
+            InputArea(id=f"input-{session.id}", classes="input-area", language="python"),
             classes="session-content",
         )
         pane = TabPane(label, content, id=f"tab-{session.id}")
@@ -191,7 +213,7 @@ class MahtabApp(App):
         # Wire handlers and focus input after mount
         def after_mount():
             self._wire_session_handlers(session)
-            self.query_one(f"#input-{session.id}", TextArea).focus()
+            self.query_one(f"#input-{session.id}", InputArea).focus()
 
         self.call_after_refresh(after_mount)
 
@@ -227,44 +249,21 @@ class MahtabApp(App):
             return self.sessions.get(session_id)
         return None
 
-    async def on_key(self, event):
+    async def on_input_area_submit(self, event: InputArea.Submit) -> None:
         """Handle input submission."""
-        session = self._get_active_session()
-        if not session:
+        # Extract session id from input id (format: input-{session_id})
+        if not event.input_id.startswith("input-"):
             return
+        session_id = event.input_id[6:]
+        session = self.sessions.get(session_id)
+        if session:
+            await self._submit_to_chat(session, event.text)
 
-        if event.key == "enter":
-            # Enter -> send to chat
-            await self._submit_to_chat(session)
-            event.prevent_default()
-
-    async def _submit_to_repl(self, session: Session):
-        """Execute code from the session's input area."""
-        input_widget = self.query_one(f"#input-{session.id}", TextArea)
-        code = input_widget.text.strip()
-        if not code:
-            return
-        input_widget.clear()
-
-        repl_pane = self.query_one(f"#repl-{session.id}", RichLog)
-
-        # Show code in a panel
-        repl_pane.write(make_code_panel(code, "You", "green"))
-
-        # Execute and show output in panel
-        stdout, errors = session.interpreter.run(code)
-        if errors:
-            repl_pane.write(make_output_panel(errors, "You", "green", is_error=True))
-        elif stdout:
-            repl_pane.write(make_output_panel(stdout, "You", "green"))
-
-    async def _submit_to_chat(self, session: Session):
+    async def _submit_to_chat(self, session: Session, text: str) -> None:
         """Send input to chat (Claude)."""
-        input_widget = self.query_one(f"#input-{session.id}", TextArea)
-        prompt = input_widget.text.strip()
+        prompt = text.strip()
         if not prompt:
             return
-        input_widget.clear()
 
         chat_pane = self.query_one(f"#chat-{session.id}", VerticalScroll)
 
