@@ -1,15 +1,15 @@
-"""REPL Agent implementation using LangChain components."""
+"""REPL Agent implementation using LangGraph."""
 
 from __future__ import annotations
 
-import re
+from typing import Any
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel, ConfigDict, Field
+from langchain_core.messages import HumanMessage
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from rich.console import Console
 
-from mahtab.core.executor import execute_code
+from mahtab.agent.graph import AgentState, build_agent_graph
 from mahtab.core.state import SessionState
 from mahtab.llm.claude_cli import ChatClaudeCLI
 from mahtab.llm.prompts import build_repl_system_prompt
@@ -19,12 +19,12 @@ from mahtab.tools.skills import load_skill_descriptions
 class REPLAgent(BaseModel):
     """Agent that manages conversation with Claude and code execution.
 
-    This agent implements the agentic loop where:
-    1. User sends a prompt
-    2. Claude responds with text and optionally code blocks
-    3. Code blocks are extracted and executed
-    4. Execution results are sent back to Claude
-    5. Loop continues until Claude responds without code blocks
+    Uses a LangGraph StateGraph for the agentic loop:
+    1. Generate: Claude responds to the prompt
+    2. Extract: Parse code blocks from response
+    3. Execute: Run code blocks in session namespace
+    4. Reflect: Evaluate if task is complete
+    5. Loop back to Generate if incomplete
 
     Attributes:
         session: The session state containing namespace and history.
@@ -40,6 +40,12 @@ class REPLAgent(BaseModel):
     console: Console | None = None
     max_turns: int = 5
 
+    _graph: Any = PrivateAttr(default=None)
+
+    def model_post_init(self, __context) -> None:
+        """Build the graph after model initialization."""
+        self._graph = build_agent_graph(llm=self.llm, max_turns=self.max_turns)
+
     async def ask(
         self,
         prompt: str,
@@ -51,9 +57,9 @@ class REPLAgent(BaseModel):
 
         Args:
             prompt: The user's prompt.
-            on_token: Callback for each token streamed (for typewriter effect).
-            on_code_block: Callback when a code block is detected.
-            on_execution: Callback with execution results.
+            on_token: Callback for each token streamed (NOT SUPPORTED in graph mode yet).
+            on_code_block: Callback when a code block is detected (NOT SUPPORTED yet).
+            on_execution: Callback with execution results (NOT SUPPORTED yet).
 
         Returns:
             The final text response from Claude.
@@ -66,66 +72,28 @@ class REPLAgent(BaseModel):
             prior_session=self.session.load_last_session(),
         )
 
-        # Add user message to history
-        self.session.add_user_message(prompt)
+        # Prepare initial state
+        initial_state: AgentState = {
+            "messages": [*self.session.messages, HumanMessage(content=prompt)],
+            "system_prompt": system_prompt,
+            "original_prompt": prompt,
+            "current_response": "",
+            "code_blocks": [],
+            "execution_results": [],
+            "turn_count": 0,
+            "session": self.session,
+            "reflection": None,
+        }
 
-        for _ in range(self.max_turns):
-            # Build messages for LLM
-            messages = [SystemMessage(content=system_prompt), *self.session.messages]
+        # Run the graph
+        result = await self._graph.ainvoke(initial_state)
 
-            # Stream response from Claude
-            response_text = ""
-            async for chunk in self.llm.astream(messages):
-                token = chunk.content
-                if token:
-                    response_text += token
-                    if on_token:
-                        on_token(token)
+        # Update session with final messages
+        final_response = result.get("current_response", "")
+        self.session.messages = result.get("messages", self.session.messages)
+        self.session.save_last_session(prompt, final_response)
 
-                # Track usage if present
-                if chunk.generation_info:
-                    usage = chunk.generation_info.get("usage", {})
-                    if usage:
-                        self.session.usage.record(
-                            cost=chunk.generation_info.get("total_cost_usd", 0),
-                            input_tokens=usage.get("input_tokens", 0),
-                            output_tokens=usage.get("output_tokens", 0),
-                            cache_read=usage.get("cache_read_input_tokens", 0),
-                            cache_create=usage.get("cache_creation_input_tokens", 0),
-                        )
-
-            # Extract code blocks
-            code_blocks = re.findall(r"```python\n(.*?)```", response_text, re.DOTALL)
-
-            if not code_blocks:
-                # No code, just a text response - we're done
-                self.session.add_assistant_message(response_text)
-                self.session.save_last_session(prompt, response_text)
-                return response_text
-
-            # Execute code blocks and collect output
-            outputs = []
-            for i, block in enumerate(code_blocks):
-                block = block.strip()
-                if on_code_block:
-                    on_code_block(block, i)
-
-                output, is_error = execute_code(block, self.session)
-                outputs.append((output, is_error))
-
-                if on_execution:
-                    on_execution(output, is_error, i)
-
-            # Add assistant response and execution results to history
-            self.session.add_assistant_message(response_text)
-
-            exec_report = "\n\n".join(
-                f"Code block {i + 1} output:\n{out}" for i, (out, _) in enumerate(outputs)
-            )
-            self.session.messages.append(HumanMessage(content=f"<execution>\n{exec_report}\n</execution>"))
-
-        # Max turns reached
-        return "(max turns reached)"
+        return final_response
 
     def ask_sync(
         self,
@@ -149,9 +117,7 @@ class REPLAgent(BaseModel):
 
         loop = asyncio.new_event_loop()
         try:
-            return loop.run_until_complete(
-                self.ask(prompt, on_token, on_code_block, on_execution)
-            )
+            return loop.run_until_complete(self.ask(prompt, on_token, on_code_block, on_execution))
         finally:
             loop.close()
 
