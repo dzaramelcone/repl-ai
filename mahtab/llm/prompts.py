@@ -31,11 +31,20 @@ Text exploration (for large strings):
 Other:
   load_claude_sessions() -> str    # Load ~/.claude/projects/*.jsonl
 
-When you want to run code, output a fenced python block. The code will execute in the user's namespace and you'll see the output. You can run multiple code blocks in one response.
+Format your response using XML tags:
+- Wrap natural language in <assistant-chat>...</assistant-chat>
+- Wrap Python code in <assistant-repl-in>...</assistant-repl-in> (NOT markdown code blocks)
+
+Example:
+<assistant-chat>Let me calculate that.</assistant-chat>
+<assistant-repl-in>
+result = 2 + 2
+print(result)
+</assistant-repl-in>
+
+Code in <assistant-repl-in> executes in the user's namespace. You can have multiple sections in one response.
 
 {repl_context}
-
-When you're done and have a final answer, just respond with text (no code block).
 
 Keep responses concise. Do NOT generate conversation transcripts or include "User:", "A:", "Assistant:" labels - just respond directly."""
 

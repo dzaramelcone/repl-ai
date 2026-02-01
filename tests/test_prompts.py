@@ -1,6 +1,6 @@
 """Tests for prompt templates."""
 
-from mahtab.llm.prompts import build_reflection_prompt
+from mahtab.llm.prompts import build_reflection_prompt, build_repl_system_prompt
 
 
 def test_build_reflection_prompt_includes_original_prompt():
@@ -21,3 +21,9 @@ def test_build_reflection_prompt_marks_errors():
         execution_results=[("Error: division by zero", True)],
     )
     assert "ERROR" in result or "error" in result.lower()
+
+
+def test_system_prompt_includes_xml_instructions():
+    prompt = build_repl_system_prompt()
+    assert "<assistant-chat>" in prompt
+    assert "<assistant-repl-in>" in prompt
