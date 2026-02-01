@@ -22,21 +22,23 @@ def test_streaming_handler_is_callback():
 
 def test_on_llm_new_token_calls_process_token():
     """on_llm_new_token should delegate to process_token."""
+    from unittest.mock import MagicMock, patch
+
     from mahtab.ui.streaming import StreamState
 
     handler = _make_handler()
     handler.reset()
+    handler._write = lambda _: None
 
-    written = []
-    handler._write_smooth = lambda text: written.append(text)
+    with patch("mahtab.ui.markdown_panel.Live") as mock_live:
+        mock_live.return_value = MagicMock()
+        # Call the callback method with XML tag
+        handler.on_llm_new_token("<assistant-chat>hello")
 
-    # Call the callback method with XML tag
-    handler.on_llm_new_token("<assistant-chat>hello")
-
-    # Should be in chat state (tag consumed, content streamed)
+    # Should be in chat state (tag consumed, content in panel)
     assert handler._state == StreamState.IN_CHAT
-    # Content should have been written
-    assert "hello" in "".join(written)
+    # Content should be in the panel buffer
+    assert "hello" in handler._chat_panel.buffer
 
 
 def test_on_llm_start_calls_start_spinner():

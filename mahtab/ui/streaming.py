@@ -21,6 +21,7 @@ from mahtab.ui.buffer_parser import (
     has_partial_backticks,
 )
 from mahtab.ui.code_panel import CodePanel
+from mahtab.ui.markdown_panel import MarkdownPanel
 from mahtab.ui.xml_panel import XmlPanel
 
 
@@ -52,6 +53,7 @@ class StreamingHandler(BaseCallbackHandler):
         self._spinner: Live | None = None
         self._code_panel = CodePanel(console)
         self._xml_panel = XmlPanel(console)
+        self._chat_panel = MarkdownPanel(console)
         self._first_token = True
         self._last_output_time: float = 0.0
         self.last_usage: dict = {}
@@ -102,6 +104,8 @@ class StreamingHandler(BaseCallbackHandler):
         if self._buffer.startswith(self._OPEN_CHAT):
             self._buffer = self._buffer[len(self._OPEN_CHAT) :]
             self._state = StreamState.IN_CHAT
+            self._write("\n")
+            self._chat_panel.start()
             return True
         if self._buffer.startswith(self._OPEN_REPL):
             self._buffer = self._buffer[len(self._OPEN_REPL) :]
@@ -165,7 +169,8 @@ class StreamingHandler(BaseCallbackHandler):
         """Handle IN_CHAT state."""
         content, remaining = find_close_tag(self._buffer, self._CLOSE_CHAT)
         if content is not None:
-            self._write_smooth(content)
+            self._chat_panel.append(content)
+            self._chat_panel.finish()
             self._buffer = remaining
             self._state = StreamState.OUTSIDE
             return True
@@ -173,23 +178,26 @@ class StreamingHandler(BaseCallbackHandler):
         if lang is not None:
             self._buffer = remaining
             self._state = StreamState.IN_CODE_BLOCK
-            self._write("\n")
+            self._chat_panel.finish()  # Finish chat panel before code block
             self._md_code_panel.start(lang)
             return True
         before, backticks = has_partial_backticks(self._buffer)
         if backticks:
             if before:
-                self._write_smooth(before)
+                self._chat_panel.append(before)
             self._buffer = backticks
+            self._chat_panel.update()
             return False
         before, partial = find_partial_close(self._buffer)
         if partial.startswith("</"):
             if before:
-                self._write_smooth(before)
+                self._chat_panel.append(before)
             self._buffer = partial
+            self._chat_panel.update()
             return False
-        self._write_smooth(self._buffer)
+        self._chat_panel.append(self._buffer)
         self._buffer = ""
+        self._chat_panel.update()
         return False
 
     def _handle_repl(self) -> bool:
@@ -239,6 +247,7 @@ class StreamingHandler(BaseCallbackHandler):
             self._md_code_panel.finish()
             self._buffer = remaining
             self._state = StreamState.IN_CHAT
+            self._chat_panel.start()  # Resume chat panel after code block
             return True
         self._md_code_panel.append(self._buffer)
         self._buffer = ""
@@ -257,8 +266,9 @@ class StreamingHandler(BaseCallbackHandler):
 
     def flush(self) -> None:
         """Flush remaining buffered content."""
-        if self._state == StreamState.IN_CHAT and self._buffer:
-            self._write_smooth(self._buffer)
+        if self._state == StreamState.IN_CHAT and self._chat_panel.is_active:
+            self._chat_panel.append(self._buffer)
+            self._chat_panel.finish()
         elif self._state == StreamState.IN_REPL and self._code_panel.is_active:
             self._code_panel.append(self._buffer)
             self._code_panel.finish()
@@ -269,7 +279,6 @@ class StreamingHandler(BaseCallbackHandler):
             self._md_code_panel.append(self._buffer)
             self._md_code_panel.finish()
         self._buffer = ""
-        self._write("\n")
 
     def reset(self) -> None:
         """Reset state for a new streaming session."""
@@ -282,6 +291,7 @@ class StreamingHandler(BaseCallbackHandler):
     def cleanup(self) -> None:
         """Clean up any active UI elements."""
         self.stop_spinner()
+        self._chat_panel.cleanup()
         self._code_panel.cleanup()
         self._xml_panel.cleanup()
         self._md_code_panel.cleanup()

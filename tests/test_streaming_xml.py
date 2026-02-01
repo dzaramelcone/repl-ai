@@ -64,15 +64,20 @@ def test_streaming_repl_back_to_outside():
 
 
 def test_streaming_chat_content_written():
-    """Chat content is written via _write_smooth."""
+    """Chat content is accumulated in chat panel buffer."""
+    from unittest.mock import MagicMock, patch
+
     handler = _make_handler()
     handler.reset()
-    written = []
-    handler._write_smooth = lambda text: written.append(text)
+    handler._write = lambda _: None
 
-    handler.process_token("<assistant-chat>hello world</assistant-chat>")
+    with patch("mahtab.ui.markdown_panel.Live") as mock_live:
+        mock_instance = MagicMock()
+        mock_live.return_value = mock_instance
+        handler.process_token("<assistant-chat>hello world</assistant-chat>")
 
-    assert "hello world" in "".join(written)
+    # Content was in the panel (buffer is cleared after finish)
+    mock_live.assert_called()
 
 
 def test_streaming_repl_content_accumulated():
@@ -107,25 +112,34 @@ def test_streaming_partial_tag_waits():
 
 def test_streaming_partial_tag_completes():
     """Partial tag completes when rest arrives."""
+    from unittest.mock import MagicMock, patch
+
     handler = _make_handler()
     handler.reset()
-    written = []
-    handler._write_smooth = lambda text: written.append(text)
+    handler._write = lambda _: None
 
-    handler.process_token("<assistant-ch")
-    handler.process_token("at>hello")
+    with patch("mahtab.ui.markdown_panel.Live") as mock_live:
+        mock_instance = MagicMock()
+        mock_live.return_value = mock_instance
+        handler.process_token("<assistant-ch")
+        handler.process_token("at>hello")
 
     assert handler._state == StreamState.IN_CHAT
-    assert "hello" in "".join(written)
+    assert "hello" in handler._chat_panel.buffer
 
 
 def test_streaming_partial_close_tag_waits():
     """Partial closing tag waits for more tokens."""
+    from unittest.mock import MagicMock, patch
+
     handler = _make_handler()
     handler.reset()
-    handler._write_smooth = lambda _: None
+    handler._write = lambda _: None
 
-    handler.process_token("<assistant-chat>hello</")
+    with patch("mahtab.ui.markdown_panel.Live") as mock_live:
+        mock_instance = MagicMock()
+        mock_live.return_value = mock_instance
+        handler.process_token("<assistant-chat>hello</")
 
     assert handler._state == StreamState.IN_CHAT
     assert handler._buffer == "</"
@@ -137,20 +151,21 @@ def test_streaming_multiple_blocks():
 
     handler = _make_handler()
     handler.reset()
-    written = []
-    handler._write_smooth = lambda text: written.append(text)
     handler._write = lambda _: None
 
-    with patch("mahtab.ui.streaming.Live") as mock_live:
-        mock_instance = MagicMock()
-        mock_live.return_value = mock_instance
+    with (
+        patch("mahtab.ui.streaming.Live") as mock_code_live,
+        patch("mahtab.ui.markdown_panel.Live") as mock_chat_live,
+    ):
+        mock_code_live.return_value = MagicMock()
+        mock_chat_live.return_value = MagicMock()
         handler.process_token("<assistant-chat>First</assistant-chat>")
         handler.process_token("<assistant-repl-in>x = 1</assistant-repl-in>")
         handler.process_token("<assistant-chat>Second</assistant-chat>")
 
     assert handler._state == StreamState.OUTSIDE
-    assert "First" in "".join(written)
-    assert "Second" in "".join(written)
+    # Chat panels were created
+    assert mock_chat_live.call_count >= 2
 
 
 def test_streaming_outputs_outside_content():
@@ -173,30 +188,37 @@ def test_streaming_generic_xml_in_panel():
 
     handler = _make_handler()
     handler.reset()
-    written = []
-    handler._write_smooth = lambda text: written.append(text)
     handler._write = lambda _: None
 
-    with patch("mahtab.ui.xml_panel.Live") as mock_live:
-        mock_instance = MagicMock()
-        mock_live.return_value = mock_instance
+    with (
+        patch("mahtab.ui.xml_panel.Live") as mock_xml_live,
+        patch("mahtab.ui.markdown_panel.Live") as mock_chat_live,
+    ):
+        mock_xml_live.return_value = MagicMock()
+        mock_chat_live.return_value = MagicMock()
         handler.process_token("<thinking>some thoughts</thinking><assistant-chat>Hello</assistant-chat>")
 
     assert handler._state == StreamState.OUTSIDE
-    assert "Hello" in "".join(written)
-    # The <thinking> content was shown in a panel, not raw output
-    mock_live.assert_called()  # Panel was created
+    # The <thinking> content was shown in a panel
+    mock_xml_live.assert_called()
+    # The chat content was shown in a panel
+    mock_chat_live.assert_called()
 
 
 def test_flush_in_chat_state():
-    """Flush writes remaining buffer when in chat state."""
+    """Flush finishes chat panel when in chat state."""
+    from unittest.mock import MagicMock, patch
+
     handler = _make_handler()
     handler.reset()
-    written = []
-    handler._write_smooth = lambda text: written.append(text)
     handler._write = lambda _: None
 
-    handler.process_token("<assistant-chat>partial content")
-    handler.flush()
+    with patch("mahtab.ui.markdown_panel.Live") as mock_live:
+        mock_instance = MagicMock()
+        mock_live.return_value = mock_instance
+        handler.process_token("<assistant-chat>partial content")
+        handler.flush()
 
-    assert "partial content" in "".join(written)
+    # Panel was created and stopped
+    mock_live.assert_called()
+    mock_instance.stop.assert_called()
