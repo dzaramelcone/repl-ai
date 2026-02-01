@@ -414,6 +414,7 @@ async def _call_claude_stream(system: str, messages: list) -> str:
         "",
         "--output-format",
         "stream-json",
+        "--verbose",
         "--include-partial-messages",
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
