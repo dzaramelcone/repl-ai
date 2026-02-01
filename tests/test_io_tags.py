@@ -60,3 +60,9 @@ def test_public_api_exports():
         setup_logging,
     ]
     assert all(e is not None for e in exports)
+
+
+def test_memory_store_exported():
+    from mahtab.io import MemoryStore
+
+    assert MemoryStore is not None
