@@ -23,6 +23,9 @@ THRESHOLDS = {
 
 def check_halstead(files: list[str]) -> int:
     """Run radon hal and check against thresholds. Returns exit code."""
+    # Exclude test files - they naturally have high h2 (unique operands) due to
+    # unique test names, string literals, and variable names in each test
+    files = [f for f in files if not f.startswith("tests/")]
     if not files:
         return 0
 

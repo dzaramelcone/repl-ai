@@ -1,6 +1,6 @@
 """Tests for graph node functions."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -152,3 +152,29 @@ def test_update_messages_after_execution():
     assert isinstance(new_messages[1], AIMessage)
     assert isinstance(new_messages[2], HumanMessage)
     assert "<execution>" in new_messages[2].content
+
+
+@pytest.mark.asyncio
+async def test_generate_node_passes_callbacks():
+    """generate_node should pass callbacks config to llm.ainvoke."""
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    from mahtab.agent.graph import generate_node
+
+    mock_llm = AsyncMock()
+    mock_llm.ainvoke.return_value = AIMessage(content="response")
+
+    mock_callback = MagicMock()
+
+    state = {
+        "messages": [HumanMessage(content="test")],
+        "system_prompt": "You are helpful.",
+        "turn_count": 0,
+    }
+
+    await generate_node(state, mock_llm, callbacks=[mock_callback])
+
+    # Verify ainvoke was called with callbacks in config
+    call_kwargs = mock_llm.ainvoke.call_args
+    assert "config" in call_kwargs.kwargs
+    assert call_kwargs.kwargs["config"]["callbacks"] == [mock_callback]

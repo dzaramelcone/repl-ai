@@ -144,12 +144,13 @@ def _parse_reflection_response(response: str) -> ReflectionResult:
         )
 
 
-async def generate_node(state: AgentState, llm) -> dict:
+async def generate_node(state: AgentState, llm, callbacks=None) -> dict:
     """Generate a response from the LLM.
 
     Args:
         state: Current agent state with messages and system_prompt.
         llm: Language model to call.
+        callbacks: Optional list of callbacks to pass to the LLM.
 
     Returns:
         Dict with current_response and incremented turn_count.
@@ -164,7 +165,7 @@ async def generate_node(state: AgentState, llm) -> dict:
     ]
 
     print("    invoking LLM with %d messages", len(messages))
-    response = await llm.ainvoke(messages)
+    response = await llm.ainvoke(messages, config={"callbacks": callbacks} if callbacks else None)
     print("    got response (%d chars)", len(response.content))
 
     return {
@@ -270,8 +271,9 @@ def build_agent_graph(llm, max_turns: int = 5):
     graph = StateGraph(AgentState)
 
     # Add nodes - wrap async nodes with llm dependency
-    async def _generate(state):
-        return await generate_node(state, llm)
+    async def _generate(state, config=None):
+        callbacks = config.get("callbacks") if config else None
+        return await generate_node(state, llm, callbacks=callbacks)
 
     async def _reflect(state):
         return await reflect_node(state, llm)
