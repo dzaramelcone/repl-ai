@@ -198,7 +198,7 @@ def _print_output(output: str, is_error: bool = False):
     console.print(Panel(output, title=f"[bold {style}]{title}[/]", border_style=style))
 
 
-async def ask(prompt: str, max_turns: int = 5) -> str:
+async def ask(prompt: str = "", max_turns: int = 5) -> str:
     """
     Ask Claude something. Claude can execute code in your namespace.
     Streams response to stdout. Returns final text response.
