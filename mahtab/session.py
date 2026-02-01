@@ -2,12 +2,47 @@
 
 from __future__ import annotations
 
+import io
 import logging
+from code import InteractiveInterpreter
+from contextlib import redirect_stderr, redirect_stdout
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 if TYPE_CHECKING:
     from mahtab.store import Store
+
+
+class SessionInterpreter(InteractiveInterpreter):
+    """Python interpreter that sends output to session loggers."""
+
+    def __init__(self, session: Session):
+        super().__init__(locals=session.namespace)
+        self.session = session
+        self._stdout_buffer = io.StringIO()
+        self._stderr_buffer = io.StringIO()
+
+    def write(self, data: str) -> None:
+        """Called by InteractiveInterpreter for error output."""
+        self.session.log_user_repl.error(f"[red]{data.rstrip()}[/red]")
+
+    def run(self, source: str) -> None:
+        """Execute source code, capturing all output."""
+        self._stdout_buffer = io.StringIO()
+        self._stderr_buffer = io.StringIO()
+
+        with redirect_stdout(self._stdout_buffer), redirect_stderr(self._stderr_buffer):
+            self.runsource(source, "<input>", "single")
+
+        # Log captured stdout
+        stdout = self._stdout_buffer.getvalue()
+        if stdout:
+            self.session.log_user_repl.info(stdout.rstrip())
+
+        # Log captured stderr (from print(..., file=sys.stderr))
+        stderr = self._stderr_buffer.getvalue()
+        if stderr:
+            self.session.log_user_repl.error(f"[red]{stderr.rstrip()}[/red]")
 
 
 class Session:
@@ -42,10 +77,9 @@ class Session:
         self.log_llm_repl = logging.getLogger(f"session.{self.id}.llm.repl")
         self.log_llm_chat = logging.getLogger(f"session.{self.id}.llm.chat")
 
+        # Python interpreter for this session
+        self.interpreter = SessionInterpreter(self)
+
     def spawn(self, context: dict | None = None) -> Session:
         """Create a child session with shared store."""
         return Session(store=self.store, parent=self, context=context)
-
-    def exec(self, code: str) -> Any:
-        """Execute Python code in this session's namespace."""
-        exec(code, self.namespace)
