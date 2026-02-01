@@ -1,3 +1,2 @@
 #!/bin/bash
-cd /Users/dzaramelcone/lab/rlm
 exec uv run python -i -m repl
