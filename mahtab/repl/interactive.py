@@ -204,6 +204,9 @@ class InteractiveREPL(code.InteractiveConsole):
                 more = False
             except EOFError:
                 break
+            except SystemExit:
+                # Handle exit() gracefully without traceback
+                break
 
         if exitmsg:
             self.write(f"{exitmsg}\n")

@@ -184,3 +184,152 @@ class TestInteractiveREPL:
         result = repl.runsource("  /  ")
         assert repl.prompt_obj.input_mode == "chat"
         assert result is False
+
+    def test_exit_handled_gracefully(self, repl, monkeypatch):
+        """exit() should not crash with SystemExit traceback."""
+        # Simulate exit() being called - it raises SystemExit
+        # The interact loop should catch this and exit cleanly
+        inputs = iter(["exit()"])
+        monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+
+        # This should NOT raise SystemExit - it should exit cleanly
+        try:
+            repl.interact()
+        except SystemExit:
+            pytest.fail("interact() should handle SystemExit gracefully, not propagate it")
+        except StopIteration:
+            # This is fine - we ran out of mocked inputs
+            pass
+
+
+class TestDynamicPromptFormatting:
+    """Tests for DynamicPrompt string formatting."""
+
+    @pytest.fixture
+    def prompt_with_history(self):
+        """Create a DynamicPrompt with session history for testing."""
+        from mahtab.repl.interactive import DynamicPrompt
+
+        session = SessionState()
+        # Add a message to create history using the proper method
+        session.add_user_message("test message content that is reasonably long")
+        ns = {}
+        return DynamicPrompt(session, ns)
+
+    @pytest.fixture
+    def prompt_with_usage(self):
+        """Create a DynamicPrompt with usage stats for testing."""
+        from mahtab.repl.interactive import DynamicPrompt
+
+        session = SessionState()
+        # Record some usage to trigger cost display
+        session.usage.record(cost=0.04, input_tokens=100, output_tokens=50, cache_read=0, cache_create=0)
+        ns = {}
+        return DynamicPrompt(session, ns)
+
+    def test_prompt_contains_memory_mb(self):
+        """Prompt should show memory usage in MB format."""
+        from mahtab.repl.interactive import DynamicPrompt
+
+        session = SessionState()
+        prompt = DynamicPrompt(session, {})
+        result = str(prompt)
+        # Should contain "MB" for memory
+        assert "MB" in result
+
+    def test_prompt_contains_hist_prefix_when_history_exists(self, prompt_with_history):
+        """Prompt should show 'hist:' prefix when there is chat history."""
+        result = str(prompt_with_history)
+        # Should contain "hist:" prefix (not just partial)
+        assert "hist:" in result
+
+    def test_prompt_contains_token_suffix_when_history_exists(self, prompt_with_history):
+        """Prompt should show token count with 't' suffix when there is history."""
+        result = str(prompt_with_history)
+        # Should contain "t" for tokens (could be t, kt, Mt, Gt)
+        # The pattern should be digits followed by t or Xt where X is k/M/G
+        import re
+
+        # Strip ANSI codes for easier matching
+        clean = re.sub(r"\x01?\x1b\[[0-9;]*m\x02?", "", result)
+        # Should match patterns like "5t" or "1.2kt" or "3.5Mt"
+        assert re.search(r"hist:\d+\.?\d*[kMG]?t", clean), f"Expected hist:Nt pattern in '{clean}'"
+
+    def test_prompt_contains_cost_when_usage_exists(self, prompt_with_usage):
+        """Prompt should show cost with $ prefix when there is usage."""
+        result = str(prompt_with_usage)
+        # Should contain "$" for cost
+        assert "$" in result
+
+    def test_prompt_cost_shows_full_value(self, prompt_with_usage):
+        """Prompt cost should show the full numeric value, not truncated."""
+        result = str(prompt_with_usage)
+        import re
+
+        # Strip ANSI codes
+        clean = re.sub(r"\x01?\x1b\[[0-9;]*m\x02?", "", result)
+        # Should show $0.04, not $0. or partial
+        assert re.search(r"\$0\.04", clean), f"Expected $0.04 in '{clean}'"
+
+    def test_prompt_ansi_escapes_properly_wrapped_for_readline(self, prompt_with_history):
+        """All ANSI escape sequences must be wrapped in \\x01...\\x02 for readline."""
+        result = str(prompt_with_history)
+
+        # Every ANSI escape (\x1b[...m) must be preceded by \x01 and followed by \x02
+        # This is required for readline to correctly calculate prompt display width
+        import re
+
+        # Find all ANSI escape sequences
+        ansi_pattern = r"\x1b\[[0-9;]*m"
+
+        # Check that each ANSI escape is wrapped
+        # Pattern: \x01 followed by ANSI escape followed by \x02
+        wrapped_pattern = r"\x01\x1b\[[0-9;]*m\x02"
+
+        # Count total ANSI escapes
+        total_ansi = len(re.findall(ansi_pattern, result))
+        # Count properly wrapped ANSI escapes
+        wrapped_ansi = len(re.findall(wrapped_pattern, result))
+
+        assert total_ansi == wrapped_ansi, (
+            f"Found {total_ansi} ANSI escapes but only {wrapped_ansi} properly wrapped. "
+            f"Unwrapped escapes cause readline to miscalculate prompt length."
+        )
+
+    def test_prompt_no_nested_readline_markers(self, prompt_with_history):
+        """Readline markers (\\x01...\\x02) must not be nested."""
+        result = str(prompt_with_history)
+
+        # Walk through string tracking nesting depth
+        depth = 0
+        for i, char in enumerate(result):
+            if char == "\x01":
+                depth += 1
+                assert depth == 1, f"Nested \\x01 at position {i}: {repr(result[max(0, i - 5) : i + 10])}"
+            elif char == "\x02":
+                assert depth == 1, f"Unexpected \\x02 at position {i} with depth {depth}"
+                depth = 0
+
+        assert depth == 0, "Unclosed \\x01 marker"
+
+    def test_prompt_format_order(self, prompt_with_usage):
+        """Prompt should show elements in order: memory, hist, cost, mode indicator."""
+        result = str(prompt_with_usage)
+        import re
+
+        # Strip ANSI codes
+        clean = re.sub(r"\x01?\x1b\[[0-9;]*m\x02?", "", result)
+
+        # Find positions of key elements
+        mb_pos = clean.find("MB")
+        cost_pos = clean.find("$")
+        mode_pos = clean.find("◈") if "◈" in clean else clean.find("◇")
+
+        # Memory should come first, then cost, then mode indicator
+        assert mb_pos >= 0, f"Missing MB in prompt: {clean}"
+        assert cost_pos >= 0, f"Missing $ in prompt: {clean}"
+        assert mode_pos >= 0, f"Missing mode indicator in prompt: {clean}"
+        assert mb_pos < cost_pos < mode_pos, (
+            f"Wrong order in prompt. Expected MB < $ < mode, "
+            f"got positions {mb_pos}, {cost_pos}, {mode_pos} in '{clean}'"
+        )
