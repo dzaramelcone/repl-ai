@@ -129,21 +129,33 @@ class StreamingHandler(BaseCallbackHandler):
 
     def _handle_outside(self) -> bool:
         """Handle OUTSIDE state."""
+        # Skip markdown code fences that wrap XML (e.g. ```xml\n<reflection>...)
+        fence_match = re.match(r"```\w*\n+", self._buffer)
+        if fence_match:
+            self._buffer = self._buffer[fence_match.end() :]
+            return True
+        # Wait if we might be starting a code fence
+        if re.match(r"```\w*$", self._buffer):
+            return False
         result = self._try_known_tags()
         if result is not None:
             return result
         result = self._try_generic_xml()
         if result is not None:
             return result
-        # Output unrecognized content up to next '<'
-        next_lt = self._buffer.find("<", 1)
-        if next_lt > 0:
-            self._write_smooth(self._buffer[:next_lt])
-            self._buffer = self._buffer[next_lt:]
+        # Output unrecognized content up to next '<' or '`'
+        next_special = len(self._buffer)
+        for char in "<`":
+            pos = self._buffer.find(char, 1)
+            if pos > 0:
+                next_special = min(next_special, pos)
+        if next_special < len(self._buffer):
+            self._write_smooth(self._buffer[:next_special])
+            self._buffer = self._buffer[next_special:]
             return True
-        if self._buffer.endswith("<"):
+        if self._buffer.endswith("<") or self._buffer.endswith("`"):
             self._write_smooth(self._buffer[:-1])
-            self._buffer = "<"
+            self._buffer = self._buffer[-1:]
         else:
             self._write_smooth(self._buffer)
             self._buffer = ""
