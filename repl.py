@@ -28,6 +28,35 @@ _original_displayhook = None
 
 # Skills directory
 SKILLS_DIR = Path("~/.mahtab/skills").expanduser()
+LAST_SESSION_FILE = Path("~/.mahtab/last_session.json").expanduser()
+
+
+def _save_last_session(user_msg: str, assistant_msg: str):
+    """Save last exchange for next session."""
+    import json
+    from datetime import datetime
+    LAST_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        "timestamp": datetime.now().isoformat(),
+        "user": user_msg[:2000],  # Truncate to save space
+        "assistant": assistant_msg[:2000],
+    }
+    LAST_SESSION_FILE.write_text(json.dumps(data, indent=2))
+
+
+def _load_last_session() -> str:
+    """Load last session context as XML."""
+    import json
+    if not LAST_SESSION_FILE.exists():
+        return ""
+    try:
+        data = json.loads(LAST_SESSION_FILE.read_text())
+        return f"""<prior_session timestamp="{data.get('timestamp', 'unknown')}">
+<human>{data.get('user', '')}</human>
+<assistant>{data.get('assistant', '')}</assistant>
+</prior_session>"""
+    except:
+        return ""
 
 
 def _capture_displayhook(value):
@@ -173,8 +202,15 @@ async def ask(prompt: str, max_turns: int = 20) -> str:
     var_summary = _summarize_namespace()
     skill_descriptions = _load_skill_descriptions()
     repl_context = _get_repl_context()
+    prior_session = _load_last_session()
 
     system = f"""You're in a shared Python REPL with the user. You can see and modify their namespace.
+
+{prior_session}
+
+To search through past conversations, use:
+  sessions = load_claude_sessions()  # Load all ~/.claude/projects/*.jsonl
+  grep(sessions, "pattern")          # Find relevant lines
 
 Available variables:
 {var_summary}
@@ -214,6 +250,7 @@ Keep responses concise. Do NOT generate conversation transcripts or include "Use
         if not code_blocks:
             # No code, just a text response - we're done
             _history.append({"role": "assistant", "content": response})
+            _save_last_session(prompt, response)
             return response
 
         # Execute code blocks and collect output
@@ -236,6 +273,11 @@ Keep responses concise. Do NOT generate conversation transcripts or include "Use
         _history.append({"role": "user", "content": f"<execution>\n{exec_report}\n</execution>"})
 
     console.print(f"[yellow]⚠ Max turns ({max_turns}) reached. Use ask() again to continue.[/]")
+    # Save last exchange before returning
+    if len(_history) >= 2:
+        last_user = next((m["content"] for m in reversed(_history) if m["role"] == "user"), "")
+        last_asst = next((m["content"] for m in reversed(_history) if m["role"] == "assistant"), "")
+        _save_last_session(last_user, last_asst)
     return "(max turns reached)"
 
 
