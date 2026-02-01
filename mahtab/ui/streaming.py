@@ -32,6 +32,9 @@ class StreamingHandler(BaseCallbackHandler):
         chars_per_second: Target output rate for smooth streaming.
     """
 
+    # Capture real stdout at class load time, before any redirects
+    _real_stdout = sys.stdout
+
     def __init__(self, console: Console | None = None, chars_per_second: float = 200.0):
         super().__init__()
         self.console = console or default_console
@@ -52,9 +55,9 @@ class StreamingHandler(BaseCallbackHandler):
         self.last_usage = None  # Set by on_llm_end
 
     def _write(self, text: str) -> None:
-        """Write text to stdout."""
-        sys.stdout.write(text)
-        sys.stdout.flush()
+        """Write text to real stdout, bypassing any redirects."""
+        self._real_stdout.write(text)
+        self._real_stdout.flush()
 
     def _write_smooth(self, text: str) -> None:
         """Write text with rate-limited smooth streaming."""
@@ -69,8 +72,8 @@ class StreamingHandler(BaseCallbackHandler):
         wait = self._char_interval - (now - self._last_output_time)
         if wait > 0 and self._last_output_time > 0:
             time.sleep(wait)
-        sys.stdout.write(char)
-        sys.stdout.flush()
+        self._real_stdout.write(char)
+        self._real_stdout.flush()
         self._last_output_time = time.time()
 
     def _make_code_panel(self, code: str, done: bool = False) -> Panel:
