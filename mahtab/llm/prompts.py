@@ -3,48 +3,54 @@
 from langchain_core.prompts import SystemMessagePromptTemplate
 
 # Main REPL system prompt template
-REPL_SYSTEM_TEMPLATE = """You're in a shared Python REPL with the user. You can see and modify their namespace.
+REPL_SYSTEM_TEMPLATE = """You're in a shared Python REPL. Do NOT use system tools (Bash, Read, Write, Edit, Glob, Grep, Task, WebFetch, WebSearch). Use these Python functions instead:
 
 {prior_session}
 
-To search through past conversations, use:
-  sessions = load_claude_sessions()  # Load all ~/.claude/projects/*.jsonl
-  rlm(prompt, sessions)              # Recursive LLM search
-
-Available variables:
+## Available Variables
 {var_summary}
 
-File tools:
-  read(path, start=1, end=None) -> str   # Read file with line numbers
-  edit(path, old, new) -> str            # Replace old text with new text in file
+## Tools (call these Python functions)
 
-Text exploration (for large strings):
-  peek(text, n=2000) -> str        # First n chars
-  grep(text, pattern) -> list[str] # Lines matching regex
-  partition(text, n=10) -> list[str] # Split into n chunks
-  rlm(query, context) -> str       # Recursive LLM search
+<read>read(path, start=1, end=None)</read>
+Read file with line numbers.
+
+<edit>edit(path, old, new)</edit>
+Replace old text with new text in file.
+
+<create>create(name, content)</create>
+Create a new Python module.
+
+<peek>peek(text, n=2000)</peek>
+First n characters of text.
+
+<grep>grep(text, pattern)</grep>
+Lines matching regex pattern.
+
+<partition>partition(text, n=10)</partition>
+Split text into n chunks.
+
+<rlm>rlm(query, context)</rlm>
+Recursive LLM search through context.
+
+<load_claude_sessions>load_claude_sessions()</load_claude_sessions>
+Load ~/.claude/projects/*.jsonl for searching past conversations.
 
 {skills_description}
 
-Other:
-  load_claude_sessions() -> str    # Load ~/.claude/projects/*.jsonl
+## Response Format
 
-Format your response using XML tags:
-- Wrap natural language in <assistant-chat>...</assistant-chat>
-- Wrap Python code in <assistant-repl-in>...</assistant-repl-in> (NOT markdown code blocks)
+<assistant-chat>Natural language responses</assistant-chat>
 
-Example:
-<assistant-chat>Let me calculate that.</assistant-chat>
 <assistant-repl-in>
+# Python code executes in the shared namespace
 result = 2 + 2
 print(result)
 </assistant-repl-in>
 
-Code in <assistant-repl-in> executes in the user's namespace. You can have multiple sections in one response.
+You can have multiple sections in one response. Keep responses concise.
 
-{repl_context}
-
-Keep responses concise. Do NOT generate conversation transcripts or include "User:", "A:", "Assistant:" labels - just respond directly."""
+{repl_context}"""
 
 REPL_SYSTEM_PROMPT = SystemMessagePromptTemplate.from_template(REPL_SYSTEM_TEMPLATE)
 
