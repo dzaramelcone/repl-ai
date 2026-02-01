@@ -319,17 +319,16 @@ async def _call_claude_stream(system: str, messages: list) -> str:
     import sys
     from collections import deque
 
-    # Build conversation as a single prompt
-    prompt_parts = []
+    # Build conversation as structured XML
+    prompt_parts = ["<conversation>"]
     for msg in messages:
         role = msg["role"]
         content = msg["content"]
-        if role == "user":
-            prompt_parts.append(f"[USER]\n{content}")
-        else:
-            prompt_parts.append(f"[ASSISTANT]\n{content}")
+        tag = "human" if role == "user" else "assistant"
+        prompt_parts.append(f"<{tag}>{content}</{tag}>")
+    prompt_parts.append("</conversation>")
 
-    full_prompt = "\n\n".join(prompt_parts)
+    full_prompt = "\n".join(prompt_parts)
 
     proc = await asyncio.create_subprocess_exec(
         "claude", "-p", full_prompt,
