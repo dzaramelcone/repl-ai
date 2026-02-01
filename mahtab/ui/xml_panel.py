@@ -15,7 +15,7 @@ def _truncate(text: str, max_len: int) -> str:
     return text[:max_len] + "…"
 
 
-def _xml_to_dict(element: ET.Element, max_len: int = 80) -> dict | str:
+def _xml_to_dict(element: ET.Element, max_len: int = 10) -> dict | str:
     """Convert XML element to dict recursively, truncating long values."""
     children = list(element)
     if not children:
