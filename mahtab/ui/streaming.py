@@ -104,13 +104,11 @@ class StreamingHandler(BaseCallbackHandler):
         if self._buffer.startswith(self._OPEN_CHAT):
             self._buffer = self._buffer[len(self._OPEN_CHAT) :]
             self._state = StreamState.IN_CHAT
-            self._write("\n")
             self._chat_panel.start()
             return True
         if self._buffer.startswith(self._OPEN_REPL):
             self._buffer = self._buffer[len(self._OPEN_REPL) :]
             self._state = StreamState.IN_REPL
-            self._write("\n")
             self._code_panel.start(title="REPL", color="magenta")
             return True
         for tag in (self._OPEN_CHAT, self._OPEN_REPL):
@@ -124,7 +122,6 @@ class StreamingHandler(BaseCallbackHandler):
         if xml_match:
             self._buffer = self._buffer[xml_match.end() :]
             self._state = StreamState.IN_XML
-            self._write("\n")
             self._xml_panel.start(xml_match.group(1))
             return True
         if re.match(r"<[a-z_-]*$", self._buffer):
