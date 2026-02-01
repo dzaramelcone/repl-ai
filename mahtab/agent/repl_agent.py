@@ -91,6 +91,12 @@ class REPLAgent(BaseModel):
 
         # Update session with final messages
         final_response = result["current_response"]
+
+        # Route structured response through logger
+        from mahtab.io import route_response
+
+        route_response(final_response)
+
         self.session.messages = result["messages"]
         self.session.save_last_session(prompt, final_response)
 
@@ -129,7 +135,7 @@ class REPLAgent(BaseModel):
 
 def create_repl_agent(
     session: SessionState | None = None,
-    model: str = "claude-opus-4-20250514",
+    model: str = "claude-haiku-4-5-20251001",
     console: Console | None = None,
     max_turns: int = 5,
 ) -> REPLAgent:
