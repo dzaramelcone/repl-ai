@@ -12,6 +12,7 @@ from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.syntax import Syntax
 
+from mahtab.llm import extract_usage
 from mahtab.ui.console import console as default_console
 
 if TYPE_CHECKING:
@@ -34,7 +35,7 @@ class StreamingHandler(BaseCallbackHandler):
     def __init__(self, console: Console | None = None, chars_per_second: float = 200.0):
         super().__init__()
         self.console = console or default_console
-        self.chars_per_second = chars_per_second
+        self._char_interval = 1.0 / chars_per_second  # seconds per character
 
         # Internal state
         self._spinner: Live | None = None
@@ -47,7 +48,8 @@ class StreamingHandler(BaseCallbackHandler):
         # Smooth streaming state
         self._last_output_time: float = 0.0
         self._last_code_update_time: float = 0.0
-        self._code_update_interval: float = 1.0 / 30.0  # 30 updates per second max
+        self._code_update_interval = 0.0333  # ~30 updates per second max
+        self.last_usage = None  # Set by on_llm_end
 
     def _write(self, text: str) -> None:
         """Write text to stdout."""
@@ -55,29 +57,21 @@ class StreamingHandler(BaseCallbackHandler):
         sys.stdout.flush()
 
     def _write_smooth(self, text: str) -> None:
-        """Write text with rate-limited smooth streaming.
-
-        Outputs characters at a consistent rate to avoid choppy bursts.
-        """
+        """Write text with rate-limited smooth streaming."""
         if not text:
             return
-
-        now = time.time()
-        char_interval = 1.0 / self.chars_per_second
-
         for char in text:
-            # Calculate time since last output
-            elapsed = now - self._last_output_time
+            self._write_char_throttled(char)
 
-            # If we're behind schedule, catch up gradually (don't sleep)
-            # If we're ahead, add a small delay
-            if elapsed < char_interval and self._last_output_time > 0:
-                time.sleep(char_interval - elapsed)
-
-            sys.stdout.write(char)
-            sys.stdout.flush()
-            self._last_output_time = time.time()
-            now = self._last_output_time
+    def _write_char_throttled(self, char: str) -> None:
+        """Write a single character with throttling."""
+        now = time.time()
+        wait = self._char_interval - (now - self._last_output_time)
+        if wait > 0 and self._last_output_time > 0:
+            time.sleep(wait)
+        sys.stdout.write(char)
+        sys.stdout.flush()
+        self._last_output_time = time.time()
 
     def _make_code_panel(self, code: str, done: bool = False) -> Panel:
         """Create a code panel for display."""
@@ -171,6 +165,7 @@ class StreamingHandler(BaseCallbackHandler):
         self._first_token = True
         self._last_output_time = 0.0
         self._last_code_update_time = 0.0
+        self.last_usage = None
 
     def cleanup(self) -> None:
         """Clean up any active UI elements."""
@@ -188,7 +183,8 @@ class StreamingHandler(BaseCallbackHandler):
         """Called by LangChain when LLM starts generating."""
         self.start_spinner()
 
-    def on_llm_end(self, _response, **_kwargs) -> None:
+    def on_llm_end(self, response, **_kwargs) -> None:
         """Called by LangChain when LLM finishes generating."""
         self.flush()
         self.stop_spinner()
+        self.last_usage = extract_usage(response)

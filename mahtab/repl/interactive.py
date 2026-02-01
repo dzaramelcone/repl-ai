@@ -133,6 +133,17 @@ def run_repl(ns: dict | None = None) -> None:
 
             asyncio.run(run())
 
+            # Record usage stats if available
+            if streaming_handler.last_usage:
+                usage = streaming_handler.last_usage
+                session.usage.record(
+                    cost=usage.get("total_cost_usd", 0),
+                    input_tokens=usage.get("input_tokens", 0),
+                    output_tokens=usage.get("output_tokens", 0),
+                    cache_read=usage.get("cache_read_input_tokens", 0),
+                    cache_create=usage.get("cache_creation_input_tokens", 0),
+                )
+
         except KeyboardInterrupt:
             streaming_handler.cleanup()
             sys.stdout.write("\n\033[33m[cancelled]\033[0m\n")
