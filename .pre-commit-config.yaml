@@ -21,3 +21,10 @@ repos:
         language: system
         types: [python]
         pass_filenames: true
+
+      - id: radon-hal
+        name: radon halstead complexity
+        entry: python3 scripts/radon_hal_check.py
+        language: system
+        types: [python]
+        pass_filenames: true
