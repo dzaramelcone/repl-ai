@@ -145,7 +145,7 @@ class MahtabApp(App):
     """
 
     BINDINGS = [
-        ("ctrl+tab", "toggle_mode", "Toggle Chat/REPL"),
+        ("ctrl+j", "toggle_mode", "Toggle Chat/REPL"),
         ("f7", "new_session", "New Tab"),
         ("f8", "close_session", "Close Tab"),
         ("f9", "prev_tab", "Prev Tab"),
@@ -172,7 +172,7 @@ class MahtabApp(App):
                         VerticalScroll(id=f"chat-{session.id}", classes="chat-pane"),
                         RichLog(id=f"repl-{session.id}", classes="repl-pane", wrap=True, markup=True),
                     ),
-                    Static("[CHAT] Ctrl+Tab to switch", id=f"mode-{session.id}", classes="mode-label"),
+                    Static("[CHAT] Ctrl+J to switch", id=f"mode-{session.id}", classes="mode-label"),
                     InputArea(id=f"input-{session.id}", classes="input-area", language="python"),
                     classes="session-content",
                 )
@@ -221,7 +221,7 @@ class MahtabApp(App):
                 VerticalScroll(id=f"chat-{session.id}", classes="chat-pane"),
                 RichLog(id=f"repl-{session.id}", classes="repl-pane", wrap=True, markup=True),
             ),
-            Static("[CHAT] Ctrl+Tab to switch", id=f"mode-{session.id}", classes="mode-label"),
+            Static("[CHAT] Ctrl+J to switch", id=f"mode-{session.id}", classes="mode-label"),
             InputArea(id=f"input-{session.id}", classes="input-area", language="python"),
             classes="session-content",
         )
@@ -271,10 +271,10 @@ class MahtabApp(App):
         # Update mode label
         mode_label = self.query_one(f"#mode-{session.id}", Static)
         if new_mode == "repl":
-            mode_label.update("[REPL] Ctrl+Tab to switch")
+            mode_label.update("[REPL] Ctrl+J to switch")
             mode_label.add_class("repl-mode")
         else:
-            mode_label.update("[CHAT] Ctrl+Tab to switch")
+            mode_label.update("[CHAT] Ctrl+J to switch")
             mode_label.remove_class("repl-mode")
 
     def _get_active_session(self) -> Session | None:
