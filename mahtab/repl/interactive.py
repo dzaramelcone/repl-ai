@@ -9,6 +9,7 @@ import sys
 
 from mahtab.agent.repl_agent import create_repl_agent
 from mahtab.core.state import SessionState
+from mahtab.io import MemoryStore, setup_logging
 from mahtab.rlm.search import rlm
 from mahtab.tools.files import create_file, open_in_editor, read_file
 from mahtab.tools.skills import load_claude_sessions, load_skill
@@ -108,6 +109,10 @@ def run_repl(ns: dict | None = None) -> None:
     session = SessionState()
     session.init_namespace(ns, ns)
     session.ensure_skills_dir()
+
+    # Initialize structured I/O
+    store = MemoryStore()
+    log, prompt_handler = setup_logging(store)
 
     agent = create_repl_agent(session=session, console=console)
     streaming_handler = StreamingHandler(console=console)
