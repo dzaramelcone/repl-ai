@@ -185,16 +185,6 @@ class TestInteractiveREPL:
         assert repl.prompt_obj.input_mode == "chat"
         assert result is False
 
-    def test_exit_calls_sys_exit(self, repl, monkeypatch):
-        """exit() should call sys.exit() to exit the whole application."""
-        inputs = iter(["exit()"])
-        monkeypatch.setattr("builtins.input", lambda _: next(inputs))
-
-        # exit() should trigger sys.exit(0), raising SystemExit with code 0
-        with pytest.raises(SystemExit) as exc_info:
-            repl.interact()
-        assert exc_info.value.code == 0
-
 
 class TestDynamicPromptFormatting:
     """Tests for DynamicPrompt string formatting."""
@@ -319,3 +309,30 @@ class TestDynamicPromptFormatting:
             f"Wrong order in prompt. Expected MB < $ < mode, "
             f"got positions {mb_pos}, {cost_pos}, {mode_pos} in '{clean}'"
         )
+
+
+class TestExitIntegration:
+    """Integration tests for exit() behavior - shells out to actual process."""
+
+    def test_exit_exits_cleanly_no_traceback(self):
+        """exit() should exit with code 0 and no traceback in output."""
+        import subprocess
+        import sys
+
+        # Run mahtab process, send exit() command
+        result = subprocess.run(
+            [sys.executable, "-m", "mahtab"],
+            input="exit()\n",
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        # Must exit with code 0
+        assert result.returncode == 0, f"Expected exit code 0, got {result.returncode}"
+
+        # No traceback in stdout or stderr
+        combined = result.stdout + result.stderr
+        assert "Traceback" not in combined, f"Found traceback in output:\n{combined}"
+        assert "Error" not in combined, f"Found Error in output:\n{combined}"
+        assert "SystemExit" not in combined, f"Found SystemExit in output:\n{combined}"

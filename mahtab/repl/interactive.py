@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import code
+import os
 import re
 import readline
 import rlcompleter
@@ -221,7 +222,8 @@ class InteractiveREPL(code.InteractiveConsole):
                 break
             except SystemExit:
                 # exit() should exit the whole application, not just the eval loop
-                sys.exit(0)
+                # Use os._exit to avoid raising another SystemExit that could print a traceback
+                os._exit(0)
 
         if exitmsg:
             self.write(f"{exitmsg}\n")
@@ -321,6 +323,48 @@ def run_repl(ns: dict) -> None:
         """Load a skill."""
         return load_skill.invoke({"name": name, "args": args, "skills_dir": session.skills_dir})
 
+    def records(tag: str) -> None:
+        """Show all raw XML records with the given tag.
+
+        Args:
+            tag: One of the IO tags (user-repl-in, user-chat, assistant-chat, etc.)
+        """
+        from mahtab.io import TAGS
+
+        if tag not in TAGS:
+            console.print(f"[red]Unknown tag:[/] {tag}")
+            console.print(f"[dim]Valid tags:[/] {', '.join(sorted(TAGS))}")
+            return
+
+        # Parse the store bytes to find matching records
+        data = store.data.decode("utf-8", errors="replace")
+        open_tag = f"<{tag}>"
+        close_tag = f"</{tag}>"
+
+        matches = []
+        start = 0
+        while True:
+            open_pos = data.find(open_tag, start)
+            if open_pos == -1:
+                break
+            close_pos = data.find(close_tag, open_pos)
+            if close_pos == -1:
+                break
+            # Extract content between tags
+            content_start = open_pos + len(open_tag)
+            content = data[content_start:close_pos]
+            matches.append(content)
+            start = close_pos + len(close_tag)
+
+        if not matches:
+            console.print(f"[dim]No records found with tag:[/] {tag}")
+            return
+
+        console.print(f"[bold]Found {len(matches)} record(s) with tag [cyan]{tag}[/]:[/]")
+        for i, content in enumerate(matches, 1):
+            console.print(f"\n[dim]── record {i} ──[/]")
+            console.print(content)
+
     # Add functions to namespace
     ns.update(
         {
@@ -332,6 +376,7 @@ def run_repl(ns: dict) -> None:
             "edit": edit,
             "create": create,
             "skill": skill,
+            "records": records,
             "peek": peek_raw,
             "grep": grep_raw,
             "partition": partition_raw,
