@@ -10,7 +10,7 @@ import sys
 
 from mahtab.agent.repl_agent import create_repl_agent
 from mahtab.core.state import SessionState
-from mahtab.io import MemoryStore, Tag, setup_logging
+from mahtab.io import MemoryStore, setup_logging
 from mahtab.rlm.search import rlm
 from mahtab.tools.files import create_file, open_in_editor, read_file
 from mahtab.tools.skills import load_claude_sessions, load_skill
@@ -337,44 +337,29 @@ def run_repl(ns: dict) -> None:
         """Load a skill."""
         return load_skill.invoke({"name": name, "args": args, "skills_dir": session.skills_dir})
 
-    def records(tag: Tag) -> None:
-        """Show all raw XML records with the given tag.
+    def records(tag: str = "") -> None:
+        """Show all raw XML records, optionally filtered by tag.
 
         Args:
-            tag: One of the IO tags (user-repl-in, user-chat, assistant-chat, etc.)
+            tag: Filter to specific tag, or empty string for all tags.
         """
         from mahtab.io import TAGS
 
-        if tag not in TAGS:
+        if tag and tag not in TAGS:
             print(f"Unknown tag: {tag}")
             print(f"Valid tags: {', '.join(sorted(TAGS))}")
             return
 
-        # Parse the store bytes to find matching records
-        data = store.data.decode("utf-8", errors="replace")
-        open_tag = f"<{tag}>"
-        close_tag = f"</{tag}>"
-
-        matches = []
-        start = 0
-        while True:
-            open_pos = data.find(open_tag, start)
-            if open_pos == -1:
-                break
-            close_pos = data.find(close_tag, open_pos)
-            if close_pos == -1:
-                break
-            # Extract full XML including tags
-            full_record = data[open_pos : close_pos + len(close_tag)]
-            matches.append(full_record)
-            start = close_pos + len(close_tag)
+        tags_to_search = [tag] if tag else list(TAGS)
+        matches = store.find_records(tags_to_search)
 
         if not matches:
-            print(f"No records found with tag: {tag}")
+            print("No records found" + (f" with tag: {tag}" if tag else ""))
             return
 
-        print(f"Found {len(matches)} record(s) with tag {tag}:")
-        for i, record in enumerate(matches, 1):
+        label = f"tag {tag}" if tag else "all tags"
+        print(f"Found {len(matches)} record(s) for {label}:")
+        for i, (_, record) in enumerate(matches, 1):
             print(f"\n── record {i} ──")
             print(record)
 
