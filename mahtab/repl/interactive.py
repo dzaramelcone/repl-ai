@@ -148,6 +148,21 @@ class InteractiveREPL(code.InteractiveConsole):
             readline.set_completer(rlcompleter.Completer(locals).complete)
             readline.parse_and_bind("tab: complete")
 
+    def runcode(self, code) -> None:
+        """Execute compiled code, intercepting SystemExit before base class prints it.
+
+        Args:
+            code: The compiled code object to execute.
+        """
+        try:
+            exec(code, self.locals)
+        except SystemExit:
+            # Re-raise to propagate to interact() handler without printing traceback
+            raise
+        except Exception:
+            # Let base class handle other exceptions (prints traceback)
+            self.showtraceback()
+
     def runsource(self, source: str, filename: str = "<input>", symbol: str = "single") -> bool:
         """Execute source code or send to chat.
 
