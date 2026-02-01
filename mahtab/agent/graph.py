@@ -58,7 +58,7 @@ def extract_code_node(state: AgentState) -> dict:
     Returns:
         Dict with code_blocks list to merge into state.
     """
-    response = state.get("current_response", "")
+    response = state["current_response"]
     blocks = re.findall(r"```python\n(.*?)```", response, re.DOTALL)
     return {"code_blocks": [b.strip() for b in blocks]}
 
@@ -76,9 +76,10 @@ def execute_node(state: AgentState) -> dict:
 
     session = state["session"]
     results = []
+    # on_execution is an optional callback - not always provided
     on_execution = state.get("on_execution")
 
-    for block in state.get("code_blocks", []):
+    for block in state["code_blocks"]:
         output, is_error = execute_code(block, session)
         results.append((output, is_error))
 
@@ -97,13 +98,13 @@ def update_messages_node(state: AgentState) -> dict:
     Returns:
         Dict with updated messages list.
     """
-    messages = list(state.get("messages", []))
+    messages = list(state["messages"])
 
     # Add assistant's response
     messages.append(AIMessage(content=state["current_response"]))
 
     # Add execution results as user message
-    results = state.get("execution_results", [])
+    results = state["execution_results"]
     if results:
         exec_report = "\n\n".join(f"Code block {i + 1} output:\n{out}" for i, (out, _) in enumerate(results))
         messages.append(HumanMessage(content=f"<execution>\n{exec_report}\n</execution>"))
@@ -155,7 +156,7 @@ async def generate_node(state: AgentState, llm, callbacks=None) -> dict:
     """
     from langchain_core.messages import SystemMessage
 
-    turn = state.get("turn_count", 0) + 1
+    turn = state["turn_count"] + 1
     messages = [
         SystemMessage(content=state["system_prompt"]),
         *state["messages"],
@@ -185,8 +186,8 @@ async def reflect_node(state: AgentState, llm) -> dict:
 
     prompt = build_reflection_prompt(
         original_prompt=state["original_prompt"],
-        code_blocks=state.get("code_blocks", []),
-        execution_results=state.get("execution_results", []),
+        code_blocks=state["code_blocks"],
+        execution_results=state["execution_results"],
     )
 
     messages = [
@@ -222,8 +223,8 @@ def should_continue(state: AgentState, max_turns: int = 5) -> str:
     Returns:
         "generate" to continue, "end" to finish.
     """
-    reflection = state.get("reflection")
-    turn_count = state.get("turn_count", 0)
+    reflection = state["reflection"]
+    turn_count = state["turn_count"]
 
     if reflection and reflection.is_complete:
         return "end"

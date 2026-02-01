@@ -90,8 +90,8 @@ class REPLAgent(BaseModel):
         result = await self._graph.ainvoke(initial_state, config={"callbacks": callbacks})
 
         # Update session with final messages
-        final_response = result.get("current_response", "")
-        self.session.messages = result.get("messages", self.session.messages)
+        final_response = result["current_response"]
+        self.session.messages = result["messages"]
         self.session.save_last_session(prompt, final_response)
 
         return final_response
