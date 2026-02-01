@@ -666,6 +666,51 @@ def read(file_path: str, start: int = 1, end: int = None) -> str:
     return "\n".join(result)
 
 
+def create(name: str, content: str = "") -> str:
+    """
+    Create a new Python module that can be imported.
+
+    Args:
+        name: Module name (e.g. "utils" creates utils.py, "foo.bar" creates foo/bar.py)
+        content: Initial content for the module (default: empty with docstring)
+
+    Returns:
+        Status message with import instruction.
+    """
+    import os
+
+    # Handle dotted names (foo.bar -> foo/bar.py)
+    parts = name.split(".")
+    if len(parts) > 1:
+        # Create parent directories
+        dir_path = Path(os.getcwd()) / "/".join(parts[:-1])
+        dir_path.mkdir(parents=True, exist_ok=True)
+        # Create __init__.py files for packages
+        for i in range(len(parts) - 1):
+            init_path = Path(os.getcwd()) / "/".join(parts[: i + 1]) / "__init__.py"
+            if not init_path.exists():
+                init_path.write_text("")
+        file_path = dir_path / f"{parts[-1]}.py"
+    else:
+        file_path = Path(os.getcwd()) / f"{name}.py"
+
+    if file_path.exists():
+        return f"Error: {file_path} already exists"
+
+    # Default content with docstring
+    if not content:
+        content = f'"""{name} module."""\n'
+
+    file_path.write_text(content)
+
+    # Ensure cwd is in sys.path for imports
+    cwd = os.getcwd()
+    if cwd not in sys.path:
+        sys.path.insert(0, cwd)
+
+    return f"OK: created {file_path}\n→ import {name}"
+
+
 def load_claude_sessions(projects_path: str = "~/.claude/projects") -> str:
     """Load all JSONL files from Claude projects into one big context."""
     from pathlib import Path
@@ -903,6 +948,7 @@ ns.update(
         "re": re,
         "rlm": rlm,
         "load_claude_sessions": load_claude_sessions,
+        "create": create,
         "edit": edit,
         "read": read,
         "skill": skill,
@@ -920,6 +966,7 @@ console.print(
         Text.from_markup("""[bold cyan]ask[/][dim](\"prompt\")[/]        [dim]→ ask Claude (streams response)[/]
 [bold cyan]clear[/][dim]()[/]             [dim]→ clear conversation history[/]
 
+[bold yellow]create[/][dim](name)[/]         [dim]→ create new module (e.g. "utils" or "foo.bar")[/]
 [bold yellow]read[/][dim](path)[/]           [dim]→ read file with line numbers[/]
 [bold yellow]edit[/][dim](path, old, new)[/] [dim]→ replace text in file[/]
 [bold yellow]skill[/][dim](name)[/]          [dim]→ invoke a skill from ~/.mahtab/skills/[/]
