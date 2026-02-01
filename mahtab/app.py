@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import io
 import logging
+from contextlib import redirect_stderr, redirect_stdout
 
 from textual.app import App
 from textual.containers import Horizontal, Vertical
@@ -202,16 +204,29 @@ class MahtabApp(App):
         # Log the input
         session.log_user_repl.info(f">>> {code}")
 
+        # Capture stdout/stderr during execution
+        stdout_buffer = io.StringIO()
+        stderr_buffer = io.StringIO()
+
         # Execute
         try:
-            try:
-                result = eval(code, session.namespace)
-                if result is not None:
-                    session.log_user_repl.info(repr(result))
-            except SyntaxError:
-                exec(code, session.namespace)
+            with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
+                try:
+                    result = eval(code, session.namespace)
+                    if result is not None:
+                        session.log_user_repl.info(repr(result))
+                except SyntaxError:
+                    exec(code, session.namespace)
         except Exception as e:
             session.log_user_repl.error(f"[red]{type(e).__name__}: {e}[/red]")
+
+        # Log any captured output
+        stdout_output = stdout_buffer.getvalue()
+        if stdout_output:
+            session.log_user_repl.info(stdout_output.rstrip())
+        stderr_output = stderr_buffer.getvalue()
+        if stderr_output:
+            session.log_user_repl.error(f"[red]{stderr_output.rstrip()}[/red]")
 
     async def _submit_to_chat(self, session: Session):
         """Send input to chat (Claude). Not yet implemented."""
