@@ -2,7 +2,7 @@
 
 import logging
 
-from mahtab.io.formatters import RichFormatter, XMLFormatter
+from mahtab.io.formatters import BytesFormatter, RichFormatter, XMLFormatter
 
 
 def test_xml_formatter_wraps_in_tag():
@@ -71,3 +71,20 @@ def test_rich_formatter_assistant_chat():
     record.tag = "assistant-chat"
     result = f.format(record)
     assert result == "[bold blue]Claude:[/] hi there"
+
+
+def test_bytes_formatter_returns_bytes():
+    f = BytesFormatter()
+    record = logging.LogRecord(
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="hello",
+        args=(),
+        exc_info=None,
+    )
+    record.tag = "user-chat"
+    result = f.format(record)
+    assert result == b"<user-chat>hello</user-chat>"
+    assert isinstance(result, bytes)

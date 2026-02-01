@@ -33,3 +33,10 @@ class XMLFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         return f"<{record.tag}>{record.getMessage()}</{record.tag}>"
+
+
+class BytesFormatter(logging.Formatter):
+    """Formats log messages as UTF-8 encoded XML bytes."""
+
+    def format(self, record: logging.LogRecord) -> bytes:
+        return f"<{record.tag}>{record.getMessage()}</{record.tag}>".encode()
