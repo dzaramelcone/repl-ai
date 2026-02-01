@@ -15,7 +15,7 @@ dependencies = [
 mahtab = "mahtab.repl.interactive:run_repl"
 
 [dependency-groups]
-dev = ["ruff", "pre-commit"]
+dev = ["ruff", "pre-commit", "pytest>=8.0.0", "pytest-asyncio>=0.23.0"]
 
 [tool.ruff]
 line-length = 120
