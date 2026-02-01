@@ -339,9 +339,11 @@ class MahtabApp(App):
             loading.remove()
             text_only = strip_code_blocks(response)
             if text_only:
-                container = Vertical(classes="assistant-message")
-                container.mount(Static("[bold]Claude:[/bold]", markup=True))
-                container.mount(Markdown(text_only))
+                container = Vertical(
+                    Static("[bold]Claude:[/bold]", markup=True),
+                    Markdown(text_only),
+                    classes="assistant-message",
+                )
                 chat_pane.mount(container)
         except Exception as e:
             loading.remove()
