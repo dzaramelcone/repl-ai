@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, TypedDict
 
 from pydantic import BaseModel
@@ -44,3 +45,17 @@ class AgentState(TypedDict, total=False):
     turn_count: int
     session: SessionState
     reflection: ReflectionResult | None
+
+
+def extract_code_node(state: AgentState) -> dict:
+    """Extract Python code blocks from the current response.
+
+    Args:
+        state: Current agent state with current_response.
+
+    Returns:
+        Dict with code_blocks list to merge into state.
+    """
+    response = state.get("current_response", "")
+    blocks = re.findall(r"```python\n(.*?)```", response, re.DOTALL)
+    return {"code_blocks": [b.strip() for b in blocks]}
