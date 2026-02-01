@@ -1058,10 +1058,10 @@ init(ns, ns)
 console.print()
 console.print(
     Panel(
-        Text.from_markup("""[bold cyan]ask[/][dim](\"prompt\")[/]        [dim]→ ask Claude (streams response)[/]
-[bold cyan]ed[/][dim]()[/]                 [dim]→ edit in $EDITOR, return text (try: ask(ed()))[/]
-[bold cyan]clear[/][dim]()[/]             [dim]→ clear conversation history[/]
-[bold cyan]usage[/][dim]()[/]             [dim]→ show session costs[/]"""),
+        Text.from_markup("""[bold cyan]ask[/][dim](\"prompt\")[/]       [dim]→ ask Claude (streams response)[/]
+[bold cyan]ed[/][dim]()[/]                [dim]→ edit in $EDITOR, return text (try: ask(ed()))[/]
+[bold cyan]clear[/][dim]()[/]              [dim]→ clear conversation history[/]
+[bold cyan]usage[/][dim]()[/]              [dim]→ show session costs[/]"""),
         title="[bold white]your tools[/]",
         subtitle="[dim]Ctrl+C to cancel[/]",
         border_style="cyan",
