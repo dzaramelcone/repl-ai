@@ -199,9 +199,15 @@ def _print_code(code: str, title: str = "Code"):
 
 
 def _print_output(output: str, is_error: bool = False):
-    """Print execution output."""
+    """Print execution output, truncating to first/last 3 lines if long."""
     style = "red" if is_error else "green"
     title = "Error" if is_error else "Output"
+
+    lines = output.split("\n")
+    if len(lines) > 8:
+        truncated = lines[:3] + [f"[dim]... ({len(lines) - 6} lines hidden) ...[/]"] + lines[-3:]
+        output = "\n".join(truncated)
+
     console.print(Panel(output, title=f"[bold {style}]{title}[/]", border_style=style))
 
 
@@ -794,6 +800,35 @@ def ed(content: str = "", path: str | None = None, suffix: str = ".py") -> str:
         result, _, _ = result.partition(marker)
         # Skip the rest of the marker line and the blank line after
     return result.strip()
+
+
+def request(url: str, method: str = "GET", **kwargs) -> str:
+    """
+    Send an HTTP request and return the response.
+
+    Args:
+        url: The URL to request
+        method: HTTP method (GET, POST, PUT, DELETE, etc.)
+        **kwargs: Passed to requests.request() - e.g. json, data, headers, params
+
+    Returns:
+        Response text (or JSON if response is JSON).
+
+    Examples:
+        request("https://httpbin.org/get")
+        request("https://api.example.com/data", "POST", json={"key": "value"})
+        request("https://api.example.com/search", params={"q": "test"})
+    """
+    import requests
+
+    resp = requests.request(method, url, **kwargs)
+    resp.raise_for_status()
+
+    # Try to return JSON if possible
+    try:
+        return resp.json()
+    except Exception:
+        return resp.text
 
 
 def load_claude_sessions(projects_path: str = "~/.claude/projects") -> str:
