@@ -30,11 +30,11 @@ The system creates a **shared namespace** between the user and Claude, enabling 
 ### Key Dependencies
 
 ```
-langchain-core >= 0.3.0    # LLM abstractions and message types
-langchain >= 0.3.0         # Tool decorators and chains
-langgraph >= 0.2.0         # Graph-based agent workflows (future use)
-pydantic >= 2.0.0          # Data validation and state models
-rich >= 13.0.0             # Terminal UI (panels, syntax highlighting)
+langchain-core >= 0.3.0       # LLM abstractions and message types
+langchain >= 0.3.0            # Tool decorators and chains
+langgraph >= 0.2.0            # Graph-based agent workflows
+pydantic >= 2.0.0             # Data validation and state models
+rich >= 13.0.0                # Terminal UI (panels, syntax highlighting)
 ```
 
 ---
@@ -60,31 +60,46 @@ rich >= 13.0.0             # Terminal UI (panels, syntax highlighting)
 │                              AGENT LAYER                                     │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ┌──────────────────────────────────────────────────────────────────────┐   │
-│  │                       REPLAgent (repl_agent.py)                       │   │
+│  │                    REPLAgent (repl_agent.py)                          │   │
 │  │  ┌────────────────────────────────────────────────────────────────┐  │   │
-│  │  │                    AGENTIC LOOP                                │  │   │
+│  │  │                    LANGGRAPH AGENT FLOW                        │  │   │
 │  │  │                                                                │  │   │
-│  │  │   ┌─────────┐     ┌──────────────┐     ┌───────────────┐      │  │   │
-│  │  │   │  User   │────▶│ Claude LLM   │────▶│ Code Blocks?  │      │  │   │
-│  │  │   │ Prompt  │     │  Response    │     │               │      │  │   │
-│  │  │   └─────────┘     └──────────────┘     └───────┬───────┘      │  │   │
-│  │  │                                                │               │  │   │
-│  │  │        ┌───────────────────────────────────────┼───────────┐  │  │   │
-│  │  │        │                    │ Yes              │ No        │  │  │   │
-│  │  │        │                    ▼                  ▼           │  │   │
-│  │  │        │          ┌─────────────────┐  ┌─────────────┐    │  │   │
-│  │  │        │          │Execute in       │  │ Return Text │    │  │   │
-│  │  │        │          │Namespace        │  │ Response    │    │  │   │
-│  │  │        │          └────────┬────────┘  └─────────────┘    │  │   │
-│  │  │        │                   │                               │  │   │
-│  │  │        │                   ▼                               │  │   │
-│  │  │        │        ┌─────────────────────┐                   │  │   │
-│  │  │        └────────│ Send Results Back   │◀──────────────────┘  │   │
-│  │  │                 │ to Claude           │                      │  │   │
-│  │  │                 └─────────────────────┘                      │  │   │
-│  │  │                 (loop until no code or max_turns)            │  │   │
+│  │  │   ┌─────────┐                                                  │  │   │
+│  │  │   │  START  │                                                  │  │   │
+│  │  │   └────┬────┘                                                  │  │   │
+│  │  │        │                                                       │  │   │
+│  │  │        ▼                                                       │  │   │
+│  │  │   ┌─────────────┐                                              │  │   │
+│  │  │   │ Model Node  │──────────────────────────────────────────┐   │  │   │
+│  │  │   │ (LLM Call)  │                                          │   │  │   │
+│  │  │   └──────┬──────┘                                          │   │  │   │
+│  │  │          │                                                 │   │  │   │
+│  │  │          ▼                                                 │   │  │   │
+│  │  │   ┌──────────────┐                                         │   │  │   │
+│  │  │   │   Router     │                                         │   │  │   │
+│  │  │   └──────┬───────┘                                         │   │  │   │
+│  │  │          │                                                 │   │  │   │
+│  │  │    ┌─────┴─────┐                                           │   │  │   │
+│  │  │    │           │                                           │   │  │   │
+│  │  │    ▼           ▼                                           │   │  │   │
+│  │  │ ┌───────┐ ┌─────────┐                                      │   │  │   │
+│  │  │ │Execute│ │   END   │                                      │   │  │   │
+│  │  │ │ Node  │ └─────────┘                                      │   │  │   │
+│  │  │ └───┬───┘                                                  │   │  │   │
+│  │  │     │                                                      │   │  │   │
+│  │  │     └──────────────────────────────────────────────────────┘   │  │   │
+│  │  │                 (loop back to Model Node)                      │  │   │
 │  │  └────────────────────────────────────────────────────────────┘  │   │
 │  └──────────────────────────────────────────────────────────────────────┘   │
+│                                                                              │
+│  ┌────────────────────┐   ┌────────────────────────────────────────────┐    │
+│  │  AgentState        │   │  LangGraph (graph.py)                       │    │
+│  │  (agent/state.py)  │   │                                             │    │
+│  │                    │   │  • create_repl_graph() - builds StateGraph  │    │
+│  │  • messages        │   │  • Model node with conditional routing      │    │
+│  │  • namespace       │   │  • Execute node for code blocks             │    │
+│  │  • pending_code    │   │  • Streaming via astream_events()           │    │
+│  └────────────────────┘   └────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────┘
                │
                ▼
@@ -107,13 +122,13 @@ rich >= 13.0.0             # Terminal UI (panels, syntax highlighting)
 │                              LLM LAYER                                       │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  ┌─────────────────────────────────────┐   ┌───────────────────────────┐    │
-│  │        ChatClaudeCLI                │   │        Prompts            │    │
+│  │         ChatClaudeCLI               │   │        Prompts            │    │
 │  │        (claude_cli.py)              │   │       (prompts.py)        │    │
 │  │                                     │   │                           │    │
-│  │  • LangChain BaseChatModel impl     │   │ • REPL system prompt      │    │
-│  │  • Calls `claude` CLI subprocess    │   │ • RLM system prompt       │    │
-│  │  • stream-json output format        │   │ • Context-aware building  │    │
-│  │  • Async streaming support          │   │                           │    │
+│  │  • CLI subprocess to `claude`       │   │ • REPL system prompt      │    │
+│  │  • No API key needed                │   │ • RLM system prompt       │    │
+│  │  • stream-json format               │   │ • Context-aware building  │    │
+│  │  • Full LangChain compatibility     │   │                           │    │
 │  └─────────────────────────────────────┘   └───────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────┘
                │
@@ -126,7 +141,7 @@ rich >= 13.0.0             # Terminal UI (panels, syntax highlighting)
 │  │  (files.py)   │   │  (text.py)    │   │      (skills.py)               │ │
 │  │               │   │               │   │                                │ │
 │  │ • read_file   │   │ • peek        │   │ • load_skill_descriptions      │ │
-│  │ • edit_file   │   │ • grep        │   │ • load_skill                   │ │
+│  │ • edit_file   │   │ • grep        │   │ • load_skill_content           │ │
 │  │ • create_file │   │ • partition   │   │ • load_claude_sessions         │ │
 │  │ • open_editor │   │ • *_raw       │   │                                │ │
 │  └───────────────┘   └───────────────┘   └────────────────────────────────┘ │
@@ -187,9 +202,11 @@ mahtab/
 ├── __init__.py           # Package exports: SessionState, UsageStats
 ├── __main__.py           # Entry point: python -m mahtab
 │
-├── agent/                # Agent logic
+├── agent/                # Agent logic and LangGraph
 │   ├── __init__.py
-│   └── repl_agent.py     # REPLAgent class with agentic loop
+│   ├── graph.py          # LangGraph StateGraph: create_repl_graph(), run_graph()
+│   ├── repl_agent.py     # REPLAgent class, get_llm()
+│   └── state.py          # AgentState for LangGraph: messages, namespace
 │
 ├── core/                 # Core infrastructure
 │   ├── __init__.py
@@ -265,9 +282,9 @@ The central state container that holds everything for a REPL session:
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2. REPLAgent (repl_agent.py)
+### 2. REPLAgent and LangGraph (repl_agent.py, graph.py)
 
-The agent implements an **agentic loop** pattern:
+The agent uses **LangGraph** for the agentic loop with conditional routing:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -276,71 +293,66 @@ The agent implements an **agentic loop** pattern:
 │                                                                  │
 │  Attributes:                                                     │
 │  • session: SessionState      - The shared state                │
-│  • llm: BaseChatModel         - Claude CLI wrapper              │
+│  • llm: BaseChatModel         - ChatClaudeCLI (via subprocess)  │
 │  • max_turns: int = 5         - Safety limit for loop           │
+│  • graph: CompiledStateGraph  - LangGraph (created lazily)      │
+│                                                                  │
+│  Methods:                                                        │
+│  • ask(prompt, callbacks...) - LangGraph-based with streaming   │
+│  • ask_legacy(prompt, ...)   - Original regex-based loop        │
+│  • ask_sync(prompt, ...)     - Synchronous wrapper              │
 │                                                                  │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
-│                    AGENTIC LOOP FLOW                            │
+│                    LANGGRAPH FLOW (graph.py)                    │
 │                                                                  │
 │     ┌──────────────────────────────────────────────────────┐    │
-│     │  1. Build system prompt with:                        │    │
-│     │     • Variable summary (summarize_namespace)         │    │
-│     │     • Available skills (load_skill_descriptions)     │    │
-│     │     • Recent REPL activity (get_activity_context)    │    │
-│     │     • Prior session context (load_last_session)      │    │
+│     │  create_repl_graph(llm, session, max_turns)          │    │
+│     │                                                       │    │
+│     │  Builds a StateGraph with:                            │    │
+│     │  • Model node: calls LLM with fresh system prompt     │    │
+│     │  • Execute node: runs code blocks in namespace        │    │
 │     └──────────────────────────────────────────────────────┘    │
 │                              │                                   │
 │                              ▼                                   │
 │     ┌──────────────────────────────────────────────────────┐    │
-│     │  2. Stream response from Claude                      │    │
-│     │     • Track tokens for typewriter effect             │    │
-│     │     • Accumulate usage stats (cost, tokens)          │    │
+│     │              GRAPH ROUTING LOGIC                      │    │
+│     │                                                       │    │
+│     │  route_after_model(state) decides:                    │    │
+│     │    • "execute" → if response has ```python blocks     │    │
+│     │    • END       → otherwise (conversation complete)    │    │
 │     └──────────────────────────────────────────────────────┘    │
 │                              │                                   │
 │                              ▼                                   │
 │     ┌──────────────────────────────────────────────────────┐    │
-│     │  3. Extract code blocks: ```python\n(.*?)```         │    │
+│     │  Streaming via graph.astream_events(version="v2")     │    │
+│     │                                                       │    │
+│     │  Events handled:                                      │    │
+│     │    • on_chat_model_stream → tokens for typewriter     │    │
+│     │    • on_chat_model_end → code block detection         │    │
+│     │    • on_chain_end → execution results                 │    │
 │     └──────────────────────────────────────────────────────┘    │
-│                              │                                   │
-│              ┌───────────────┴───────────────┐                  │
-│              │ No code blocks                │ Has code blocks  │
-│              ▼                               ▼                  │
-│     ┌─────────────────┐          ┌─────────────────────────┐   │
-│     │  Return text    │          │  Execute each block     │   │
-│     │  response       │          │  in session.globals_ns  │   │
-│     └─────────────────┘          └─────────────────────────┘   │
-│                                              │                  │
-│                                              ▼                  │
-│                                  ┌─────────────────────────┐   │
-│                                  │  Append execution       │   │
-│                                  │  results to messages    │   │
-│                                  │  <execution>...</exec>  │   │
-│                                  └─────────────────────────┘   │
-│                                              │                  │
-│                                              ▼                  │
-│                                  ┌─────────────────────────┐   │
-│                                  │  Loop back to step 2    │   │
-│                                  │  (until no code or      │   │
-│                                  │   max_turns reached)    │   │
-│                                  └─────────────────────────┘   │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 3. ChatClaudeCLI (claude_cli.py)
+### 3. LLM Layer (claude_cli.py)
 
-A LangChain `BaseChatModel` implementation that shells out to the `claude` CLI:
+The LLM backend communicates with Claude via the CLI subprocess:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                      ChatClaudeCLI                               │
+│                     (claude_cli.py)                              │
 ├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Uses Claude Code CLI for authentication (no API key needed)     │
 │                                                                  │
 │  Configuration:                                                  │
 │  • model: str = "claude-opus-4-20250514"                         │
 │  • max_tokens: int = 4096                                        │
 │  • cwd: str = "/tmp"      (subprocess working directory)         │
+│  • setting_sources: str   (CLI configuration)                    │
 │                                                                  │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
@@ -355,6 +367,7 @@ A LangChain `BaseChatModel` implementation that shells out to the `claude` CLI:
 │                               </conversation>"                   │
 │                               --system-prompt "..."              │
 │                               --output-format stream-json        │
+│                               --verbose --include-partial-messages
 │                                                                  │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
@@ -422,70 +435,86 @@ User types: ask("explain this code")
                     ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    ask() in interactive.py                       │
-└─────────────────────────────────────────────────────────────────┘
-                    │
-                    │ 1. Build system prompt with context
-                    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│            build_repl_system_prompt()                            │
 │                                                                  │
-│  Includes:                                                       │
-│  • summarize_namespace() → "x: 42, df: DataFrame with 100 rows"  │
-│  • load_skill_descriptions() → "debug: Debug Python code"        │
-│  • get_activity_context() → ">>> x = 42\n>>> df = pd.read..."    │
-│  • load_last_session() → "<prior_session>...</prior_session>"    │
+│  Calls agent.ask() with callbacks:                               │
+│  • on_token → StreamingHandler.process_token()                   │
+│  • on_execution → print_output_panel()                           │
 └─────────────────────────────────────────────────────────────────┘
                     │
-                    │ 2. Add user message to history
                     ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│         session.messages.append(HumanMessage(prompt))            │
+│            REPLAgent.ask() - LangGraph Execution                 │
 └─────────────────────────────────────────────────────────────────┘
                     │
-                    │ 3. Stream response from Claude
+                    │ 1. Create initial state with user message
                     ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                  ChatClaudeCLI.astream()                         │
+│         create_initial_state(messages=[HumanMessage(prompt)])    │
+└─────────────────────────────────────────────────────────────────┘
+                    │
+                    │ 2. Stream events from LangGraph
+                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│        graph.astream_events(initial_state, version="v2")         │
 │                                                                  │
-│  Subprocess: claude -p "..." --model claude-opus-4-20250514           │
-│              --output-format stream-json                         │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │              MODEL NODE                                      ││
+│  │                                                              ││
+│  │  1. Build fresh system prompt:                               ││
+│  │     • summarize_namespace() → variable descriptions          ││
+│  │     • load_skill_descriptions() → available skills           ││
+│  │     • get_activity_context() → recent REPL commands          ││
+│  │     • load_last_session() → prior conversation               ││
+│  │                                                              ││
+│  │  2. Call LLM (ChatClaudeCLI via subprocess)                 ││
+│  │                                                              ││
+│  │  3. Stream response tokens via on_chat_model_stream          ││
+│  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
                     │
-                    │ 4. Process streaming tokens
+                    │ 3. Route based on response
+                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│               route_after_model(state) decides:                  │
+│                                                                  │
+│         ┌─────────────────┐              ┌───────────┐          │
+│         │  Code blocks?   │              │  Neither  │          │
+│         │  ```python      │              │           │          │
+│         └────────┬────────┘              └─────┬─────┘          │
+│                  │                             │                │
+│                  ▼                             ▼                │
+│         ┌─────────────────┐              ┌───────────┐          │
+│         │  Execute Node   │              │    END    │          │
+│         │                 │              │           │          │
+│         └────────┬────────┘              └───────────┘          │
+│                  │                                              │
+│                  │     Execute code in session.globals_ns       │
+│                  │     Shared namespace with user!              │
+│                  │                                              │
+│                  ▼                                              │
+│         Loop back to Model Node                                 │
+│         (until END or max_turns)                                │
+└─────────────────────────────────────────────────────────────────┘
+                    │
+                    │ 4. Process streaming events
                     ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │              StreamingHandler.process_token()                    │
 │                                                                  │
+│  • on_chat_model_stream → tokens for typewriter effect           │
 │  • Spinner → first token stops spinner                           │
-│  • Text → typewriter output                                      │
+│  • Text → direct output                                          │
 │  • ```python\n → switch to live code panel                       │
 │  • ``` → finalize code panel                                     │
 └─────────────────────────────────────────────────────────────────┘
                     │
-                    │ 5. Extract and execute code blocks
+                    │ 5. Save final response
                     ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│            re.findall(r"```python\n(.*?)```", response)          │
-│                              │                                   │
-│                              ▼                                   │
-│                    execute_code(block, session)                  │
-│                              │                                   │
-│                              ▼                                   │
-│               ┌──────────────────────────────┐                  │
-│               │ eval/exec in session.globals │                  │
-│               │ Shared namespace with user!  │                  │
-│               └──────────────────────────────┘                  │
+│  session.add_assistant_message(final_response)                   │
+│  session.save_last_session(prompt, final_response)               │
 └─────────────────────────────────────────────────────────────────┘
                     │
-                    │ 6. Send results back to Claude
-                    ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  session.messages.append(                                        │
-│    HumanMessage("<execution>Code block 1 output:\n...</exec>")   │
-│  )                                                               │
-└─────────────────────────────────────────────────────────────────┘
-                    │
-                    │ 7. Loop continues until no code blocks
                     ▼
               Final text response
 ```
@@ -584,18 +613,20 @@ The fundamental design principle is **namespace sharing**:
 >>> print(result)
 ```
 
-### 2. Agentic Loop Pattern
+### 2. LangGraph Agent Pattern
 
-Claude operates in a loop:
-1. Receive prompt
-2. Generate response (may include code)
-3. If code present → execute → send results back → goto 2
-4. If no code → conversation complete
+The agent uses a LangGraph StateGraph with conditional routing:
 
-This allows Claude to:
-- Try something, see the error, fix it
-- Build up complex results incrementally
-- React to actual execution results
+1. **START** → Model Node (call LLM)
+2. **Router** inspects response:
+   - Code blocks present → **Execute Node** → back to Model  
+   - Neither → **END**
+3. Loop continues until END or max_turns
+
+This pattern enables:
+- **Code execution**: Python blocks run in shared namespace
+- **Error recovery**: Claude sees errors and can fix them
+- **Streaming**: Fine-grained token/event callbacks via `astream_events()`
 
 ### 3. Context-Aware Prompts
 
@@ -656,16 +687,35 @@ A novel approach to exploring large contexts:
 
 ### Tools Available to Claude
 
+#### File Tools (files.py)
 | Tool | Purpose | Example |
 |------|---------|---------|
-| `read(path)` | Read file with line numbers | `read("main.py", 1, 50)` |
+| `read(path, start, end)` | Read file with line numbers | `read("main.py", 1, 50)` |
 | `edit(path, old, new)` | Replace text in file | `edit("main.py", "bug", "fix")` |
-| `create(name)` | Create new Python module | `create("utils")` → utils.py |
+| `create(name, content)` | Create new Python module | `create("utils")` → utils.py |
+
+#### Text Tools (text.py)
+| Tool | Purpose | Example |
+|------|---------|---------|
 | `peek(text, n)` | First n chars of text | `peek(log, 2000)` |
 | `grep(text, pattern)` | Lines matching regex | `grep(log, "ERROR")` |
 | `partition(text, n)` | Split into n chunks | `partition(log, 10)` |
+
+#### Special Tools
+| Tool | Purpose | Example |
+|------|---------|---------|
 | `rlm(query, context)` | Recursive LLM search | `rlm("find bug", log)` |
-| `skill(name)` | Invoke a skill | `skill("debug")` |
+| `skill(name, args)` | Load skill instructions | `skill("debug")` |
+| `load_claude_sessions()` | Load ~/.claude/projects/*.jsonl | `grep(sessions, "pattern")` |
+
+#### Skill Loading
+Skills are loaded by Claude outputting Python code that calls the `skill()` function:
+
+```python
+print(skill("debug"))  # Load the debug skill
+```
+
+The skill content is then printed and included in the conversation context.
 
 ### REPL Modes
 
@@ -711,7 +761,7 @@ uv run python -i -m mahtab
 
 ```python
 from mahtab.repl.interactive import run_repl
-from mahtab.agent.repl_agent import create_repl_agent
+from mahtab.agent.repl_agent import create_repl_agent, get_llm
 from mahtab.core.state import SessionState
 
 # Option 1: Run full REPL
@@ -722,6 +772,25 @@ session = SessionState()
 session.init_namespace(globals())
 agent = create_repl_agent(session=session)
 response = agent.ask_sync("analyze this data")
+
+# Option 3: Specify model
+agent = create_repl_agent(
+    session=session,
+    model="claude-sonnet-4-20250514",
+)
+
+# Option 4: Async with callbacks
+import asyncio
+
+async def main():
+    response = await agent.ask(
+        "analyze this data",
+        on_token=lambda t: print(t, end=""),
+        on_code_block=lambda code, idx: print(f"Code {idx}: {code}"),
+        on_execution=lambda out, err, idx: print(f"Output: {out}"),
+    )
+
+asyncio.run(main())
 ```
 
 ---
@@ -730,28 +799,38 @@ response = agent.ask_sync("analyze this data")
 
 ### Why CLI subprocess instead of API?
 
-The `claude` CLI is used instead of direct API calls for:
-- **Authentication**: Relies on Claude Code's auth
-- **Consistency**: Same model behavior as Claude Code
-- **Simplicity**: No API key management needed
+The ChatClaudeCLI approach via subprocess has several advantages:
+- **No API key management**: Uses Claude Code CLI authentication
+- **Simpler setup**: Works out of the box with Claude Code installed
+- **Cost tracking**: CLI provides built-in usage and cost tracking
+- **Consistent behavior**: Same model behavior as Claude Code
+
+### Why LangGraph?
+
+LangGraph provides structured agent workflows:
+- **StateGraph**: Declarative node/edge definitions
+- **Conditional routing**: Route to execute or end based on response
+- **Streaming events**: Fine-grained control via `astream_events()`
+- **Modularity**: Easy to add new nodes (e.g., human-in-the-loop)
 
 ### Why LangChain?
 
-- **BaseChatModel**: Standard interface for LLMs
+- **BaseChatModel**: Standard interface for ChatClaudeCLI
 - **Message types**: HumanMessage, AIMessage, SystemMessage
-- **Tool decorators**: `@tool` for function tools
-- **Future**: LangGraph for more complex agent patterns
+- **Ecosystem**: Integrates with LangGraph, LangSmith, etc.
 
 ### Why Pydantic?
 
-- **Validation**: SessionState fields are validated
+- **Validation**: SessionState and AgentState fields are validated
 - **Serialization**: Easy JSON export for persistence
 - **Type hints**: IDE autocomplete and type checking
+- **ConfigDict**: Allows arbitrary types (e.g., BaseChatModel instances)
 
 ---
 
 ## Future Considerations
 
-1. **LangGraph Integration**: The `langgraph` dependency suggests plans for more sophisticated agent workflows
-2. **Tool Use**: LangChain tools are defined but not yet used as official tool calls (code is extracted via regex)
-3. **Modal REPL**: The backtick mode switching provides a foundation for different interaction paradigms
+1. **Human-in-the-Loop**: LangGraph supports interrupt nodes for user confirmation before code execution
+2. **Multi-Agent Patterns**: LangGraph enables supervisor/worker patterns for complex tasks
+3. **LangSmith Integration**: Tracing and debugging of agent runs
+4. **Additional Tools**: File search, web browsing, shell execution as bound tools

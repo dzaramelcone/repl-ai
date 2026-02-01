@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import re
 from typing import TYPE_CHECKING
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, ConfigDict, Field
 from rich.console import Console
@@ -24,32 +23,15 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-def get_llm(model: str = "claude-sonnet-4-20250514", use_api: bool | None = None) -> BaseChatModel:
-    """Get the appropriate LLM based on configuration.
-
-    If ANTHROPIC_API_KEY is set, uses ChatAnthropic for native tool calling.
-    Otherwise falls back to ChatClaudeCLI (subprocess-based).
+def get_llm(model: str = "claude-sonnet-4-20250514") -> BaseChatModel:
+    """Get the LLM using Claude CLI subprocess.
 
     Args:
         model: Model name to use.
-        use_api: Force API usage (True) or CLI (False). If None, auto-detect.
 
     Returns:
-        Configured LLM instance.
+        Configured ChatClaudeCLI instance.
     """
-    # Auto-detect based on API key presence
-    if use_api is None:
-        use_api = bool(os.environ.get("ANTHROPIC_API_KEY"))
-
-    if use_api:
-        try:
-            from langchain_anthropic import ChatAnthropic
-
-            return ChatAnthropic(model=model)
-        except ImportError:
-            # Fall back to CLI if langchain-anthropic not installed
-            pass
-
     return ChatClaudeCLI(model=model)
 
 
@@ -59,15 +41,14 @@ class REPLAgent(BaseModel):
     This agent uses LangGraph for the agentic loop:
     1. User sends a prompt
     2. Graph routes to model node
-    3. Model responds with text, tool calls, or code blocks
-    4. Tool calls are executed via ToolNode
-    5. Code blocks are executed in the namespace
-    6. Results sent back to model
-    7. Loop continues until model responds with just text
+    3. Model responds with text or code blocks
+    4. Code blocks are executed in the namespace
+    5. Results sent back to model
+    6. Loop continues until model responds with just text
 
     Attributes:
         session: The session state containing namespace and history.
-        llm: The language model to use.
+        llm: The language model to use (ChatClaudeCLI via subprocess).
         console: Rich console for output (optional, for streaming).
         max_turns: Maximum number of turns in the agentic loop.
         graph: The compiled LangGraph (created lazily).
@@ -321,7 +302,6 @@ def create_repl_agent(
     model: str = "claude-sonnet-4-20250514",
     console: Console | None = None,
     max_turns: int = 5,
-    use_api: bool | None = None,
 ) -> REPLAgent:
     """Create a REPL agent with the given configuration.
 
@@ -330,7 +310,6 @@ def create_repl_agent(
         model: Claude model to use.
         console: Rich console for output.
         max_turns: Maximum turns in the agentic loop.
-        use_api: Force API usage (True) or CLI (False). If None, auto-detect.
 
     Returns:
         Configured REPLAgent instance.
@@ -338,7 +317,7 @@ def create_repl_agent(
     if session is None:
         session = SessionState()
 
-    llm = get_llm(model=model, use_api=use_api)
+    llm = get_llm(model=model)
 
     return REPLAgent(
         session=session,

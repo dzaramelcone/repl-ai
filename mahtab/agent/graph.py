@@ -6,16 +6,14 @@ import re
 from typing import TYPE_CHECKING, Any, Literal
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
-from langchain_core.tools import BaseTool
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.prebuilt import ToolNode
 
 from mahtab.agent.state import AgentStateDict, create_initial_state
 from mahtab.core.executor import execute_code
 from mahtab.llm.prompts import build_repl_system_prompt
-from mahtab.tools.skills import get_skill_tool, load_skill_descriptions
+from mahtab.tools.skills import load_skill_descriptions
 
 if TYPE_CHECKING:
     from mahtab.core.state import SessionState
@@ -36,7 +34,6 @@ def extract_code_blocks(text: str) -> list[str]:
 def create_repl_graph(
     llm: BaseChatModel,
     session: SessionState,
-    tools: list[BaseTool] | None = None,
     max_turns: int = 5,
 ) -> CompiledStateGraph:
     """Create a LangGraph for the REPL agent.
@@ -44,34 +41,17 @@ def create_repl_graph(
     The graph implements the following flow:
     1. Model node: Call the LLM with current messages
     2. Route based on response:
-       - If tool calls present -> tools node -> back to model
        - If code blocks present -> execute node -> back to model
        - Otherwise -> END
 
     Args:
-        llm: The language model to use.
+        llm: The language model to use (ChatClaudeCLI via subprocess).
         session: Session state containing namespace and history.
-        tools: Additional tools to bind to the model.
         max_turns: Maximum iterations before stopping.
 
     Returns:
         Compiled LangGraph ready for invocation.
     """
-    # Build tools list - always include the skill tool
-    skill_tool = get_skill_tool(session.skills_dir)
-    all_tools = [skill_tool]
-    if tools:
-        all_tools.extend(tools)
-
-    # Check if the LLM supports tool binding
-    try:
-        model_with_tools = llm.bind_tools(all_tools)
-        supports_tools = True
-    except (NotImplementedError, AttributeError):
-        # LLM doesn't support tool binding (e.g., ChatClaudeCLI)
-        model_with_tools = llm
-        supports_tools = False
-
     # Track iterations to prevent infinite loops
     iteration_count = {"count": 0}
 
@@ -103,29 +83,18 @@ def create_repl_graph(
             messages.append(msg)
 
         # Call the model
-        response = await model_with_tools.ainvoke(messages)
-
-        # Track which skills were loaded via tool calls
-        loaded_skills = list(state.get("loaded_skills", []))
-        if hasattr(response, "tool_calls") and response.tool_calls:
-            for tc in response.tool_calls:
-                if tc.get("name") == "load_skill":
-                    skill_name = tc.get("args", {}).get("name", "")
-                    if skill_name and skill_name not in loaded_skills:
-                        loaded_skills.append(skill_name)
+        response = await llm.ainvoke(messages)
 
         return {
             "messages": [response],
-            "loaded_skills": loaded_skills,
         }
 
-    def route_after_model(state: AgentStateDict) -> Literal["tools", "execute", "__end__"]:
+    def route_after_model(state: AgentStateDict) -> Literal["execute", "__end__"]:
         """Route based on model response.
 
         Routes to:
-        - "tools" if there are tool calls
         - "execute" if there are Python code blocks
-        - END if neither (conversation complete)
+        - END if no code blocks (conversation complete)
         """
         # Check iteration limit
         if iteration_count["count"] >= max_turns:
@@ -136,10 +105,6 @@ def create_repl_graph(
             return END
 
         last_msg = messages[-1]
-
-        # Check for tool calls (if LLM supports them)
-        if supports_tools and hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
-            return "tools"
 
         # Check for code blocks in response
         content = getattr(last_msg, "content", "")
@@ -186,39 +151,20 @@ def create_repl_graph(
 
     # Add nodes
     builder.add_node("model", model_node)
-
-    if supports_tools:
-        # Use LangGraph's prebuilt ToolNode for handling tool calls
-        tool_node = ToolNode(all_tools)
-        builder.add_node("tools", tool_node)
-
     builder.add_node("execute", execute_node)
 
     # Add edges
     builder.add_edge(START, "model")
 
-    # Conditional routing after model
-    if supports_tools:
-        builder.add_conditional_edges(
-            "model",
-            route_after_model,
-            {
-                "tools": "tools",
-                "execute": "execute",
-                END: END,
-            },
-        )
-        builder.add_edge("tools", "model")
-    else:
-        # Without tool support, only route between execute and end
-        builder.add_conditional_edges(
-            "model",
-            route_after_model,
-            {
-                "execute": "execute",
-                END: END,
-            },
-        )
+    # Conditional routing after model: execute code blocks or end
+    builder.add_conditional_edges(
+        "model",
+        route_after_model,
+        {
+            "execute": "execute",
+            END: END,
+        },
+    )
 
     builder.add_edge("execute", "model")
 
@@ -230,7 +176,6 @@ async def run_graph(
     prompt: str,
     session: SessionState,
     on_token: callable | None = None,
-    on_tool_call: callable | None = None,
     on_execution: callable | None = None,
 ) -> str:
     """Run the graph with streaming support.
@@ -240,7 +185,6 @@ async def run_graph(
         prompt: User's prompt.
         session: Session state.
         on_token: Callback for streamed tokens.
-        on_tool_call: Callback when a tool is called.
         on_execution: Callback with code execution results.
 
     Returns:
@@ -266,18 +210,6 @@ async def run_graph(
                     on_token(chunk.content)
                 final_response += chunk.content
 
-        # Handle tool calls
-        elif event_type == "on_tool_start":
-            tool_name = event.get("name", "")
-            tool_input = event.get("data", {}).get("input", {})
-            if on_tool_call:
-                on_tool_call(tool_name, tool_input)
-
-        # Handle tool results
-        elif event_type == "on_tool_end":
-            tool_output = event.get("data", {}).get("output", "")
-            # Tool output is handled by the graph flow
-
     # Get final state to extract the last response
     try:
         final_state = await graph.aget_state(config={})
@@ -300,10 +232,9 @@ def create_simple_graph(
     llm: BaseChatModel,
     session: SessionState,
 ) -> CompiledStateGraph:
-    """Create a simplified graph without tool support.
+    """Create the REPL graph.
 
-    This is useful for LLMs that don't support tool binding,
-    like the ChatClaudeCLI.
+    This is an alias for create_repl_graph for backwards compatibility.
 
     Args:
         llm: The language model to use.
@@ -312,4 +243,4 @@ def create_simple_graph(
     Returns:
         Compiled LangGraph.
     """
-    return create_repl_graph(llm=llm, session=session, tools=None)
+    return create_repl_graph(llm=llm, session=session)
