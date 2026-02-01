@@ -70,7 +70,7 @@ class ChatClaudeCLI(BaseChatModel):
         if "system" in kwargs:
             system = kwargs["system"]
 
-        result, usage = await self._call_claude_async(prompt, system)
+        result, usage = await self._call_claude_async(prompt, system, run_manager)
 
         generation = ChatGeneration(
             message=AIMessage(content=result),
@@ -178,7 +178,9 @@ class ChatClaudeCLI(BaseChatModel):
             stderr = await proc.stderr.read()
             raise RuntimeError(f"claude CLI failed: {stderr.decode()}")
 
-    async def _call_claude_async(self, prompt: str, system: str) -> tuple[str, dict | None]:
+    async def _call_claude_async(
+        self, prompt: str, system: str, run_manager: AsyncCallbackManagerForLLMRun | None = None
+    ) -> tuple[str, dict | None]:
         """Call Claude CLI and return full response with usage stats."""
         cmd = [
             "claude",
@@ -219,7 +221,10 @@ class ChatClaudeCLI(BaseChatModel):
                     if event.get("type") == "content_block_delta":
                         delta = event.get("delta", {})
                         if delta.get("type") == "text_delta":
-                            full_response += delta.get("text", "")
+                            text = delta.get("text", "")
+                            full_response += text
+                            if text and run_manager:
+                                await run_manager.on_llm_new_token(text)
 
                 elif data.get("type") == "result":
                     usage = {
