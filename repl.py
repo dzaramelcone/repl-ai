@@ -188,7 +188,7 @@ def _print_output(output: str, is_error: bool = False):
     console.print(Panel(output, title=f"[bold {style}]{title}[/]", border_style=style))
 
 
-async def ask(prompt: str, max_turns: int = 20) -> str:
+async def ask(prompt: str, max_turns: int = 5) -> str:
     """
     Ask Claude something. Claude can execute code in your namespace.
     Streams response to stdout. Returns final text response.
@@ -662,7 +662,7 @@ def q(prompt: str):
     return asyncio.create_task(ask(prompt))
 
 
-def ask_sync(prompt: str, max_turns: int = 20) -> None:
+def ask_sync(prompt: str, max_turns: int = 5) -> None:
     """Synchronous version of ask() - blocks until complete, streams to stdout."""
     import sys
     try:
@@ -790,7 +790,7 @@ _bg_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 _bg_tasks: list[concurrent.futures.Future] = []
 
 
-def bg(prompt: str, max_turns: int = 20) -> concurrent.futures.Future:
+def bg(prompt: str, max_turns: int = 5) -> concurrent.futures.Future:
     """
     Run ask() in background thread. Returns a Future.
 
