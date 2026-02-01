@@ -100,3 +100,31 @@ class REPLWidget(Widget):
             self.session.log_llm_repl,
         ]:
             logger.addHandler(store_handler)
+
+    async def on_key(self, event):
+        if event.key == "ctrl+enter":
+            await self.submit()
+            event.prevent_default()
+
+    async def submit(self):
+        input_widget = self.query_one("#input", TextArea)
+        code = input_widget.text.strip()
+        if not code:
+            return
+        input_widget.clear()
+
+        # Log the input
+        self.session.log_user_repl.info(f">>> {code}")
+
+        # Execute
+        try:
+            # Try eval first for expressions
+            try:
+                result = eval(code, self.session.namespace)
+                if result is not None:
+                    self.session.log_user_repl.info(repr(result))
+            except SyntaxError:
+                # Fall back to exec for statements
+                exec(code, self.session.namespace)
+        except Exception as e:
+            self.session.log_user_repl.error(f"[red]{type(e).__name__}: {e}[/red]")

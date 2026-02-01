@@ -84,3 +84,31 @@ async def test_repl_widget_logs_to_store(session):
         await pilot.pause()
         session.log_user_chat.info("stored message")
         assert b"stored message" in session.store.data
+
+
+@pytest.mark.asyncio
+async def test_repl_widget_exec_logs_to_repl(session):
+    app = WidgetTestApp(session)
+    async with app.run_test() as pilot:
+        await pilot.pause()  # Wait for handlers
+        widget = app.query_one(REPLWidget)
+        input_area = widget.query_one("#input", TextArea)
+        input_area.text = "x = 42"
+        await widget.submit()
+        repl = widget.query_one("#repl", RichLog)
+        assert len(repl.lines) > 0
+        assert session.namespace.get("x") == 42
+
+
+@pytest.mark.asyncio
+async def test_repl_widget_exec_error_logs(session):
+    app = WidgetTestApp(session)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        widget = app.query_one(REPLWidget)
+        input_area = widget.query_one("#input", TextArea)
+        input_area.text = "1/0"
+        await widget.submit()
+        repl = widget.query_one("#repl", RichLog)
+        # Should have logged the error
+        assert len(repl.lines) > 0
