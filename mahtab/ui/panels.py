@@ -187,7 +187,7 @@ def print_usage_panel(usage_stats: dict, console: Console | None = None) -> None
     """Print usage statistics panel.
 
     Args:
-        usage_stats: Dictionary of usage stats.
+        usage_stats: Dictionary of usage stats from UsageStats.model_dump().
         console: Console to use. Defaults to global console.
     """
     if console is None:
@@ -198,14 +198,14 @@ def print_usage_panel(usage_stats: dict, console: Console | None = None) -> None
         Panel(
             f"""[bold]Session Usage Stats[/]
 
-Calls:          {s.get("num_calls", 0)}
-Total Cost:     ${s.get("total_cost_usd", 0):.4f}
+Calls:          {s["num_calls"]}
+Total Cost:     ${s["total_cost_usd"]:.4f}
 
 [dim]Tokens:[/]
-  Input:        {s.get("input_tokens", 0):,}
-  Output:       {s.get("output_tokens", 0):,}
-  Cache Read:   {s.get("cache_read_input_tokens", 0):,}
-  Cache Create: {s.get("cache_creation_input_tokens", 0):,}""",
+  Input:        {s["input_tokens"]:,}
+  Output:       {s["output_tokens"]:,}
+  Cache Read:   {s["cache_read_input_tokens"]:,}
+  Cache Create: {s["cache_creation_input_tokens"]:,}""",
             title="[cyan]usage()[/]",
             border_style="dim",
         )

@@ -32,7 +32,7 @@ class ChatClaudeCLI(BaseChatModel):
     model: str = Field(default="claude-opus-4-20250514", description="Claude model identifier")
     max_tokens: int = Field(default=4096, description="Maximum tokens to generate")
     cwd: str = Field(default="/tmp", description="Working directory for subprocess")
-    setting_sources: str = Field(default="", description="Setting sources for Claude CLI")
+    setting_sources: str | None = Field(default=None, description="Setting sources for Claude CLI")
 
     @property
     def _llm_type(self) -> str:

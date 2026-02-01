@@ -160,7 +160,7 @@ def open_in_editor(content: str = "", path: str | None = None, suffix: str = ".p
     # Add last assistant message as context
     if history:
         for msg in reversed(history):
-            if hasattr(msg, "type") and msg.type == "ai":
+            if msg.type == "ai":
                 last_response = msg.content
                 # Truncate and format as comments
                 preview = last_response[:500]
