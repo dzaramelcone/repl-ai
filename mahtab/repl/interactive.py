@@ -159,10 +159,9 @@ class InteractiveREPL(code.InteractiveConsole):
 
     def showtraceback(self) -> None:
         """Print traceback using Rich and log it."""
-        import traceback
-
-        tb_text = "".join(traceback.format_exception(*sys.exc_info()))
-        self.log.info(tb_text, extra={"tag": "user-repl-out"})
+        exc_type, exc_value, _ = sys.exc_info()
+        msg = f"{exc_type.__name__}: {exc_value}"
+        self.log.info(msg, extra={"tag": "user-repl-out"})
         console.print_exception(show_locals=False)
 
     def showsyntaxerror(self, filename: str | None = None) -> None:
