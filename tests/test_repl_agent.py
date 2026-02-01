@@ -181,3 +181,149 @@ async def test_ask_passes_on_execution_callback():
     initial_state = call_args[0][0]
     assert "on_execution" in initial_state
     assert initial_state["on_execution"] is on_execution
+
+
+class TestContextTagsIntegration:
+    """Integration tests to verify all context tags are sent to the model."""
+
+    @pytest.fixture
+    def logger_with_handler(self):
+        """Create a logger configured with PromptHandler."""
+        import logging
+
+        from mahtab.io.handlers import PromptHandler
+
+        handler = PromptHandler()
+        logger = logging.getLogger("test_context_tags")
+        logger.setLevel(logging.INFO)
+        logger.handlers.clear()
+        logger.addHandler(handler)
+        return logger, handler
+
+    def test_user_repl_in_appears_in_context(self, logger_with_handler):
+        """user-repl-in tag should appear in prompt context."""
+        logger, handler = logger_with_handler
+        logger.info("x = 42", extra={"tag": "user-repl-in"})
+        context = handler.get_context()
+        assert "<user-repl-in>" in context
+        assert "x = 42" in context
+        assert "</user-repl-in>" in context
+
+    def test_user_repl_out_appears_in_context(self, logger_with_handler):
+        """user-repl-out tag should appear in prompt context."""
+        logger, handler = logger_with_handler
+        logger.info("42", extra={"tag": "user-repl-out"})
+        context = handler.get_context()
+        assert "<user-repl-out>" in context
+        assert "42" in context
+        assert "</user-repl-out>" in context
+
+    def test_assistant_repl_in_appears_in_context(self, logger_with_handler):
+        """assistant-repl-in tag should appear in prompt context."""
+        logger, handler = logger_with_handler
+        logger.info("print('hello')", extra={"tag": "assistant-repl-in"})
+        context = handler.get_context()
+        assert "<assistant-repl-in>" in context
+        assert "print('hello')" in context
+        assert "</assistant-repl-in>" in context
+
+    def test_assistant_repl_out_appears_in_context(self, logger_with_handler):
+        """assistant-repl-out tag should appear in prompt context."""
+        logger, handler = logger_with_handler
+        logger.info("hello", extra={"tag": "assistant-repl-out"})
+        context = handler.get_context()
+        assert "<assistant-repl-out>" in context
+        assert "hello" in context
+        assert "</assistant-repl-out>" in context
+
+    def test_user_chat_appears_in_context(self, logger_with_handler):
+        """user-chat tag should appear in prompt context."""
+        logger, handler = logger_with_handler
+        logger.info("what is 2+2?", extra={"tag": "user-chat"})
+        context = handler.get_context()
+        assert "<user-chat>" in context
+        assert "what is 2+2?" in context
+        assert "</user-chat>" in context
+
+    def test_assistant_chat_appears_in_context(self, logger_with_handler):
+        """assistant-chat tag should appear in prompt context."""
+        logger, handler = logger_with_handler
+        logger.info("2+2 equals 4", extra={"tag": "assistant-chat"})
+        context = handler.get_context()
+        assert "<assistant-chat>" in context
+        assert "2+2 equals 4" in context
+        assert "</assistant-chat>" in context
+
+    def test_all_tags_in_single_context(self, logger_with_handler):
+        """All context tags should appear together when logged."""
+        logger, handler = logger_with_handler
+
+        # Log messages with all tags
+        logger.info("repl input", extra={"tag": "user-repl-in"})
+        logger.info("repl output", extra={"tag": "user-repl-out"})
+        logger.info("assistant code", extra={"tag": "assistant-repl-in"})
+        logger.info("code output", extra={"tag": "assistant-repl-out"})
+        logger.info("user question", extra={"tag": "user-chat"})
+        logger.info("assistant answer", extra={"tag": "assistant-chat"})
+
+        context = handler.get_context()
+
+        # Verify all tags present
+        for tag in [
+            "user-repl-in",
+            "user-repl-out",
+            "assistant-repl-in",
+            "assistant-repl-out",
+            "user-chat",
+            "assistant-chat",
+        ]:
+            assert f"<{tag}>" in context, f"Missing opening tag: {tag}"
+            assert f"</{tag}>" in context, f"Missing closing tag: {tag}"
+
+    def test_context_cleared_after_clear(self, logger_with_handler):
+        """Context should be empty after clear() is called."""
+        logger, handler = logger_with_handler
+        logger.info("test message", extra={"tag": "user-chat"})
+        assert handler.get_context() != ""
+        handler.clear()
+        assert handler.get_context() == ""
+
+    @pytest.mark.asyncio
+    async def test_agent_receives_logged_context(self):
+        """REPLAgent should receive logged context in system prompt."""
+        session = SessionState()
+        prompt_handler = PromptHandler()
+
+        # Set up logger to use the handler
+        import logging
+
+        logger = logging.getLogger("test_agent_context")
+        logger.setLevel(logging.INFO)
+        logger.handlers.clear()
+        logger.addHandler(prompt_handler)
+
+        # Log some context
+        logger.info("x = 1", extra={"tag": "user-repl-in"})
+        logger.info("1", extra={"tag": "user-repl-out"})
+
+        agent = REPLAgent(session=session, prompt_handler=prompt_handler)
+
+        mock_graph = AsyncMock()
+        mock_graph.ainvoke.return_value = {
+            "current_response": "I see x=1",
+            "code_blocks": [],
+            "turn_count": 1,
+            "messages": session.messages,
+        }
+
+        with patch.object(agent, "_graph", mock_graph):
+            await agent.ask("what is x?")
+
+        # Verify the logged context was passed to the graph
+        call_args = mock_graph.ainvoke.call_args
+        initial_state = call_args[0][0]
+        system_prompt = initial_state["system_prompt"]
+
+        assert "<user-repl-in>" in system_prompt
+        assert "x = 1" in system_prompt
+        assert "<user-repl-out>" in system_prompt
