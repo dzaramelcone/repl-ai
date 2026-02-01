@@ -68,10 +68,8 @@ def build_repl_system_prompt(
     Returns:
         Formatted system prompt string.
     """
-    # Format REPL context if present
-    formatted_repl_context = ""
-    if repl_context:
-        formatted_repl_context = f"<repl_activity>\n{repl_context}\n</repl_activity>"
+    # REPL context already has proper XML tags (user-repl-in, user-repl-out)
+    formatted_repl_context = repl_context or ""
 
     return REPL_SYSTEM_TEMPLATE.format(
         var_summary=var_summary,

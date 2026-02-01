@@ -56,7 +56,7 @@ class DynamicPrompt:
             self._last_history_len += 1
             item = readline.get_history_item(self._last_history_len)
             if item and not item.startswith("ask("):
-                self.session.record_activity(f">>> {item}")
+                self.session.record_activity(f"<user-repl-in>{item}</user-repl-in>")
 
         parts = []
 

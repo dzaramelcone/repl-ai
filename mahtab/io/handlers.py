@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Protocol
 
+from rich.panel import Panel
+
 from mahtab.io.formatters import BytesFormatter, RichFormatter, XMLFormatter
 from mahtab.ui.streaming import StreamingHandler
 
@@ -64,5 +66,12 @@ class DisplayHandler(logging.Handler):
             case "assistant-chat" | "assistant-repl-in" | "assistant-repl-out":
                 # Skip - already shown during streaming / on_execution callback
                 pass
+            case "user-chat":
+                panel = Panel(
+                    record.getMessage(),
+                    title="[bold green]You[/]",
+                    border_style="green",
+                )
+                self.console.print(panel)
             case _:
                 self.console.print(self.format(record))

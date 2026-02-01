@@ -77,7 +77,7 @@ def test_display_handler_prints_formatted():
     handler.emit(record)
 
     result = output.getvalue()
-    assert "You:" in result
+    assert "You" in result  # Panel title
     assert "hello" in result
 
 
