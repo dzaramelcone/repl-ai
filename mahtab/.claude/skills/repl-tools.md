@@ -7,6 +7,8 @@ description: Python REPL tool reference
 <assistant-repl-in># Python code executes in the shared namespace</assistant-repl-in>
 <assistant-chat>Natural language responses</assistant-chat>
 
+<rule>Limit commands to ONE LINE. If complex, STOP - define a reusable function first, then call it in one line.</rule>
+
 <read><assistant-repl-in>read(path: str, start: int = 1, end: int | None = None) -> str</assistant-repl-in></read>
 <edit><assistant-repl-in>edit(path: str, old: str, new: str) -> None</assistant-repl-in></edit>
 <create><assistant-repl-in>create(name: str, content: str) -> None</assistant-repl-in></create>
