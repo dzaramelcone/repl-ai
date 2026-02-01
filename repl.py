@@ -270,11 +270,11 @@ Text exploration (for large strings):
 Other:
   load_claude_sessions() -> str    # Load ~/.claude/projects/*.jsonl
 
-When you want to run code, output a fenced python block. The code will execute in the user's namespace and you'll see the output. You can run multiple code blocks in one response.
+Code execution:
+  ```python eval   → runs code, you SEE the output (use when you need the result)
+  ```python        → runs code, you DON'T see output (use for final code to show user)
 
 {f"<repl_activity>{chr(10)}{repl_context}{chr(10)}</repl_activity>" if repl_context else ""}
-
-When you're done and have a final answer, just respond with text (no code block).
 
 Keep responses concise. Do NOT generate conversation transcripts or include "User:", "A:", "Assistant:" labels - just respond directly."""
 
@@ -284,29 +284,38 @@ Keep responses concise. Do NOT generate conversation transcripts or include "Use
         # Call Claude with streaming
         response = await _call_claude_stream(system, _history)
 
-        # Extract code blocks
-        code_blocks = re.findall(r"```python\n(.*?)```", response, re.DOTALL)
+        # Extract code blocks - distinguish eval blocks (loop back) from regular (don't loop)
+        eval_blocks = re.findall(r"```python eval\n(.*?)```", response, re.DOTALL)
+        regular_blocks = re.findall(r"```python\n(.*?)```", response, re.DOTALL)
 
-        if not code_blocks:
+        # Execute all blocks and show output
+        all_blocks = [(code, True) for code in eval_blocks] + [(code, False) for code in regular_blocks]
+
+        if not all_blocks:
             # No code, just a text response - we're done
             _history.append({"role": "assistant", "content": response})
             _save_last_session(prompt, response)
             return response
 
         # Execute code blocks and collect output
-        # (code already shown during streaming, just show execution output)
-        outputs = []
-        for block in code_blocks:
-            block = block.strip()
-            output = _exec_code(block)
-            outputs.append(output)
+        eval_outputs = []
+        for code, is_eval in all_blocks:
+            code = code.strip()
+            output = _exec_code(code)
             is_error = output.startswith("Error:")
             _print_output(output, is_error)
+            if is_eval:
+                eval_outputs.append(output)
 
-        # Add assistant response and execution results to history
+        # Add assistant response to history
         _history.append({"role": "assistant", "content": response})
 
-        exec_report = "\n\n".join(f"Code block {i + 1} output:\n{out}" for i, out in enumerate(outputs))
+        # Only loop back if there were eval blocks
+        if not eval_outputs:
+            _save_last_session(prompt, response)
+            return response
+
+        exec_report = "\n\n".join(f"Code block {i + 1} output:\n{out}" for i, out in enumerate(eval_outputs))
         _history.append({"role": "user", "content": f"<execution>\n{exec_report}\n</execution>"})
 
     console.print(f"[yellow]⚠ Max turns ({max_turns}) reached. Use ask() again to continue.[/]")
