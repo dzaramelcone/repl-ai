@@ -1062,9 +1062,9 @@ console.print(
 [bold cyan]ed[/][dim]()[/]                 [dim]→ edit in $EDITOR, return text (try: ask(ed()))[/]
 [bold cyan]clear[/][dim]()[/]             [dim]→ clear conversation history[/]
 [bold cyan]usage[/][dim]()[/]             [dim]→ show session costs[/]"""),
-        title="[bold white]mahtab[/]",
+        title="[bold white]your tools[/]",
         subtitle="[dim]Ctrl+C to cancel[/]",
-        border_style="bright_black",
+        border_style="cyan",
     )
 )
 console.print(
