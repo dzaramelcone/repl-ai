@@ -10,7 +10,7 @@ Available variables:
 
 When you want to run code, output a fenced python block. The code will execute in the user's namespace and you'll see the output. You can run multiple code blocks in one response.
 
-When you're done and have a final answer, just respond with text (no code block).
+IMPORTANT: Code and execution output are displayed in a separate REPL pane. Do NOT repeat or echo execution output in your text responses - the user already sees it. Just provide brief commentary if needed.
 
 Keep responses concise."""
 
