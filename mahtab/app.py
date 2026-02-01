@@ -131,10 +131,6 @@ class MahtabApp(App):
         margin: 0;
     }
 
-    .assistant-message MarkdownListItem {
-        height: 1;
-    }
-
     .chat-loading {
         height: 3;
     }
