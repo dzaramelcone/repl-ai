@@ -168,8 +168,8 @@ def test_streaming_multiple_blocks():
     assert mock_chat_live.call_count >= 2
 
 
-def test_streaming_outputs_outside_content():
-    """Content outside known tags is output directly."""
+def test_streaming_discards_outside_content():
+    """Content outside known tags is discarded (not output raw)."""
     handler = _make_handler()
     handler.reset()
     written = []
@@ -179,7 +179,8 @@ def test_streaming_outputs_outside_content():
 
     assert handler._state == StreamState.OUTSIDE
     assert handler._buffer == ""
-    assert "garbage before" in "".join(written)
+    # Outside content is discarded, not written
+    assert "".join(written) == ""
 
 
 def test_streaming_generic_xml_in_panel():

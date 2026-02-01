@@ -144,21 +144,18 @@ class StreamingHandler(BaseCallbackHandler):
         result = self._try_generic_xml()
         if result is not None:
             return result
-        # Output unrecognized content up to next '<' or '`'
+        # Discard unrecognized content up to next '<' or '`' (don't output raw text)
         next_special = len(self._buffer)
         for char in "<`":
             pos = self._buffer.find(char, 1)
             if pos > 0:
                 next_special = min(next_special, pos)
         if next_special < len(self._buffer):
-            self._write_smooth(self._buffer[:next_special])
             self._buffer = self._buffer[next_special:]
             return True
         if self._buffer.endswith("<") or self._buffer.endswith("`"):
-            self._write_smooth(self._buffer[:-1])
             self._buffer = self._buffer[-1:]
         else:
-            self._write_smooth(self._buffer)
             self._buffer = ""
         return False
 
