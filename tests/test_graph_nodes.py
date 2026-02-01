@@ -178,3 +178,70 @@ async def test_generate_node_passes_callbacks():
     call_kwargs = mock_llm.ainvoke.call_args
     assert "config" in call_kwargs.kwargs
     assert call_kwargs.kwargs["config"]["callbacks"] == [mock_callback]
+
+
+def test_execute_node_calls_on_execution_callback():
+    """execute_node should call on_execution callback for each code block."""
+    from mahtab.agent.graph import execute_node
+    from mahtab.core.state import SessionState
+
+    session = SessionState()
+    callback_calls = []
+
+    def on_execution(output, is_error):
+        callback_calls.append((output, is_error))
+
+    state: AgentState = {
+        "code_blocks": ["x = 42", "print(x)"],
+        "execution_results": [],
+        "session": session,
+        "on_execution": on_execution,
+    }
+    execute_node(state)
+
+    # Callback should have been called twice (once per block)
+    assert len(callback_calls) == 2
+    # Second block prints x, so output should be "42\n"
+    assert callback_calls[1][0] == "42\n"
+    assert callback_calls[1][1] is False
+
+
+def test_execute_node_callback_receives_errors():
+    """on_execution callback should receive is_error=True for failed code."""
+    from mahtab.agent.graph import execute_node
+    from mahtab.core.state import SessionState
+
+    session = SessionState()
+    callback_calls = []
+
+    def on_execution(output, is_error):
+        callback_calls.append((output, is_error))
+
+    state: AgentState = {
+        "code_blocks": ["1/0"],
+        "execution_results": [],
+        "session": session,
+        "on_execution": on_execution,
+    }
+    execute_node(state)
+
+    assert len(callback_calls) == 1
+    assert "division by zero" in callback_calls[0][0].lower()
+    assert callback_calls[0][1] is True
+
+
+def test_execute_node_works_without_callback():
+    """execute_node should work fine when on_execution is None."""
+    from mahtab.agent.graph import execute_node
+    from mahtab.core.state import SessionState
+
+    session = SessionState()
+    state: AgentState = {
+        "code_blocks": ["x = 1"],
+        "execution_results": [],
+        "session": session,
+        "on_execution": None,
+    }
+    # Should not raise
+    result = execute_node(state)
+    assert len(result["execution_results"]) == 1

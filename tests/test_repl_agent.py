@@ -142,3 +142,32 @@ async def test_ask_accepts_streaming_handler():
     call_kwargs = mock_graph.ainvoke.call_args
     assert "config" in call_kwargs.kwargs
     assert handler in call_kwargs.kwargs["config"]["callbacks"]
+
+
+@pytest.mark.asyncio
+async def test_ask_passes_on_execution_callback():
+    """ask() should pass on_execution callback in initial state."""
+    session = SessionState()
+    agent = REPLAgent(session=session)
+
+    mock_graph = AsyncMock()
+    mock_graph.ainvoke.return_value = {
+        "current_response": "Hello!",
+        "code_blocks": [],
+        "turn_count": 1,
+        "messages": session.messages,
+    }
+
+    callback_calls = []
+
+    def on_execution(output, is_error):
+        callback_calls.append((output, is_error))
+
+    with patch.object(agent, "_graph", mock_graph):
+        await agent.ask("test prompt", on_execution=on_execution)
+
+    # Verify graph.ainvoke was called with on_execution in initial state
+    call_args = mock_graph.ainvoke.call_args
+    initial_state = call_args[0][0]
+    assert "on_execution" in initial_state
+    assert initial_state["on_execution"] is on_execution

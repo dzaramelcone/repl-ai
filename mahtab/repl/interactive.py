@@ -14,7 +14,7 @@ from mahtab.tools.files import create_file, open_in_editor, read_file
 from mahtab.tools.skills import load_claude_sessions, load_skill
 from mahtab.tools.text import grep_raw, partition_raw, peek_raw
 from mahtab.ui.console import console
-from mahtab.ui.panels import print_banner, print_usage_panel
+from mahtab.ui.panels import print_banner, print_output_panel, print_usage_panel
 from mahtab.ui.streaming import StreamingHandler
 
 # ANSI codes for prompt
@@ -121,8 +121,15 @@ def run_repl(ns: dict | None = None) -> None:
         try:
             streaming_handler.reset()
 
+            def handle_execution(output, is_error):
+                print_output_panel(output, is_error)
+
             async def run():
-                return await agent.ask(prompt, streaming_handler=streaming_handler)
+                return await agent.ask(
+                    prompt,
+                    streaming_handler=streaming_handler,
+                    on_execution=handle_execution,
+                )
 
             asyncio.run(run())
 

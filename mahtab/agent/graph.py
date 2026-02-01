@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from typing import TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -33,6 +34,7 @@ class AgentState(TypedDict, total=False):
         turn_count: Number of generate cycles completed.
         session: The SessionState for namespace and persistence.
         reflection: Result of the last reflection (if any).
+        on_execution: Callback for execution output (output, is_error).
     """
 
     messages: list[BaseMessage]
@@ -44,6 +46,7 @@ class AgentState(TypedDict, total=False):
     turn_count: int
     session: SessionState
     reflection: ReflectionResult | None
+    on_execution: Callable[[str, bool], None] | None
 
 
 def extract_code_node(state: AgentState) -> dict:
@@ -76,11 +79,17 @@ def execute_node(state: AgentState) -> dict:
 
     session = state["session"]
     results = []
+    on_execution = state.get("on_execution")
 
     for i, block in enumerate(state.get("code_blocks", [])):
         print("    executing block %d", i + 1)
         output, is_error = execute_code(block, session)
         results.append((output, is_error))
+
+        # Call execution callback if provided
+        if on_execution:
+            on_execution(output, is_error)
+
         if is_error:
             print("    block %d errored: %s", i + 1, output[:100] if output else "")
 

@@ -50,12 +50,14 @@ class REPLAgent(BaseModel):
         self,
         prompt: str,
         streaming_handler=None,
+        on_execution=None,
     ) -> str:
         """Send a prompt to Claude and handle the conversation.
 
         Args:
             prompt: The user's prompt.
             streaming_handler: Optional callback handler for streaming tokens.
+            on_execution: Optional callback for code execution output (output, is_error).
 
         Returns:
             The final text response from Claude.
@@ -79,6 +81,7 @@ class REPLAgent(BaseModel):
             "turn_count": 0,
             "session": self.session,
             "reflection": None,
+            "on_execution": on_execution,
         }
 
         # Run the graph
@@ -96,12 +99,14 @@ class REPLAgent(BaseModel):
         self,
         prompt: str,
         streaming_handler=None,
+        on_execution=None,
     ) -> str:
         """Synchronous version of ask().
 
         Args:
             prompt: The user's prompt.
             streaming_handler: Optional callback handler for streaming tokens.
+            on_execution: Optional callback for code execution output (output, is_error).
 
         Returns:
             The final text response from Claude.
@@ -110,7 +115,9 @@ class REPLAgent(BaseModel):
 
         loop = asyncio.new_event_loop()
         try:
-            return loop.run_until_complete(self.ask(prompt, streaming_handler=streaming_handler))
+            return loop.run_until_complete(
+                self.ask(prompt, streaming_handler=streaming_handler, on_execution=on_execution)
+            )
         finally:
             loop.close()
 
