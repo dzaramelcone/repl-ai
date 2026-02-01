@@ -24,7 +24,7 @@ def rlm(
     depth: int = 0,
     max_iters: int = 10,
     max_depth: int = 3,
-    model: str = "claude-opus-4-20250514",
+    model: str = "claude-haiku-4-5-20250514",
     console: Console = default_console,
 ) -> str:
     """Recursive Language Model search.
