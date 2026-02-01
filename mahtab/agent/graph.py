@@ -75,16 +75,25 @@ def execute_node(state: AgentState) -> dict:
     Returns:
         Dict with execution_results list to merge into state.
     """
+    import logging
+
     from mahtab.core.executor import execute_code
 
+    log = logging.getLogger("mahtab")
     session = state["session"]
     results = []
     # on_execution is an optional callback - not always provided
     on_execution = state.get("on_execution")
 
     for block in state["code_blocks"]:
+        # Log the code being executed
+        log.info(block, extra={"tag": "assistant-repl-in"})
+
         output, is_error = execute_code(block, session)
         results.append((output, is_error))
+
+        # Log the execution output
+        log.info(output, extra={"tag": "assistant-repl-out"})
 
         if on_execution:
             on_execution(output, is_error)

@@ -14,7 +14,7 @@ class MockLLM:
         self.responses = responses
         self.call_count = 0
 
-    async def ainvoke(self, _messages, _config=None):
+    async def ainvoke(self, _messages, config=None):  # noqa: ARG002
         response = self.responses[self.call_count % len(self.responses)]
         self.call_count += 1
         return AIMessage(content=response)
