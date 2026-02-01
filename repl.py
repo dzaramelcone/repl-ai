@@ -1058,19 +1058,16 @@ init(ns, ns)
 console.print()
 console.print(
     Panel(
-        Text.from_markup("""[bold cyan]ask[/][dim](\"prompt\")[/]        [dim]→ ask Claude (streams response)[/]
-[bold cyan]clear[/][dim]()[/]             [dim]→ clear conversation history[/]
+        Text.from_markup("""[bold white]You:[/]
+  [bold cyan]ask[/][dim](prompt)[/]          [dim]→ talk to Claude[/]
+  [bold cyan]ed[/][dim]()[/]                 [dim]→ compose in $EDITOR (try: ask(ed()))[/]
+  [bold cyan]clear[/][dim]()[/]              [dim]→ clear conversation history[/]
+  [bold cyan]usage[/][dim]()[/]              [dim]→ show session costs[/]
 
-[bold yellow]ed[/][dim]()[/]                 [dim]→ edit in $EDITOR, return text (try: ask(ed()))[/]
-[bold yellow]create[/][dim](name)[/]         [dim]→ create new module (e.g. "utils" or "foo.bar")[/]
-[bold yellow]read[/][dim](path)[/]           [dim]→ read file with line numbers[/]
-[bold yellow]edit[/][dim](path, old, new)[/] [dim]→ replace text in file[/]
-[bold yellow]skill[/][dim](name)[/]          [dim]→ invoke a skill from ~/.mahtab/skills/[/]
-
-[bold green]peek[/][dim](text, n)[/]        [dim]→ first n chars of text[/]
-[bold green]grep[/][dim](text, pattern)[/]  [dim]→ lines matching regex[/]
-[bold green]partition[/][dim](text, n)[/]   [dim]→ split text into n chunks[/]
-[bold green]rlm[/][dim](query, context)[/]  [dim]→ recursive LLM search[/]"""),
+[bold white]Mahtab uses:[/]
+  [dim]read, edit, create     → file operations[/]
+  [dim]peek, grep, partition  → text exploration[/]
+  [dim]rlm, skill             → search & skills[/]"""),
         title="[bold white]mahtab[/]",
         subtitle="[dim]Ctrl+C to cancel[/]",
         border_style="bright_black",
