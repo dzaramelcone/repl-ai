@@ -111,7 +111,10 @@ class MahtabApp(App):
     """
 
     BINDINGS = [
-        # Tab management bindings TBD - avoiding terminal conflicts for now
+        ("f7", "new_session", "New Tab"),
+        ("f8", "close_session", "Close Tab"),
+        ("f9", "prev_tab", "Prev Tab"),
+        ("f10", "next_tab", "Next Tab"),
     ]
 
     def __init__(self):
