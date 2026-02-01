@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal, TypedDict
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import add_messages
 from langgraph.graph.state import CompiledStateGraph
 
 from mahtab.agent.state import AgentStateDict, create_initial_state
@@ -17,6 +18,17 @@ from mahtab.tools.skills import load_skill_descriptions
 
 if TYPE_CHECKING:
     from mahtab.core.state import SessionState
+
+
+class GraphState(TypedDict):
+    """Typed state for the REPL agent graph.
+
+    Using add_messages annotation ensures messages are appended
+    rather than replaced when nodes return new messages.
+    """
+
+    messages: Annotated[list[BaseMessage], add_messages]
+    namespace: dict[str, Any]
 
 
 def extract_code_blocks(text: str) -> list[str]:
@@ -69,16 +81,23 @@ def create_repl_graph(
 
         This node:
         1. Builds messages with system prompt
-        2. Calls the LLM
-        3. Returns the response message
+        2. Includes persistent session history for conversation continuity
+        3. Adds current turn messages from graph state
+        4. Calls the LLM
+        5. Returns the response message
         """
         iteration_count["count"] += 1
 
         # Build messages with fresh system prompt
         system_prompt = build_system_prompt()
-        messages = [SystemMessage(content=system_prompt)]
+        messages: list[BaseMessage] = [SystemMessage(content=system_prompt)]
 
-        # Add conversation history
+        # Add persistent conversation history from session (prior turns)
+        for msg in session.messages:
+            messages.append(msg)
+
+        # Add messages from current graph execution
+        # (current user prompt + any execution results within this invocation)
         for msg in state["messages"]:
             messages.append(msg)
 
@@ -146,8 +165,8 @@ def create_repl_graph(
 
         return {"messages": [exec_msg]}
 
-    # Build the graph
-    builder = StateGraph(dict)
+    # Build the graph with typed state (add_messages reducer for proper accumulation)
+    builder = StateGraph(GraphState)
 
     # Add nodes
     builder.add_node("model", model_node)

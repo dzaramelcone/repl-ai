@@ -6,7 +6,7 @@ import re
 from typing import TYPE_CHECKING
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, ConfigDict, Field
 from rich.console import Console
@@ -96,10 +96,10 @@ class REPLAgent(BaseModel):
         """
         graph = self._ensure_graph()
 
-        # Add user message to session history
-        self.session.add_user_message(prompt)
-
         # Create initial state with the user's message
+        # Note: We don't add to session.messages here to avoid duplication
+        # since model_node includes session.messages in the LLM context.
+        # Messages are persisted to session after graph completion.
         initial_state = create_initial_state(
             messages=[HumanMessage(content=prompt)],
             namespace=self.session.globals_ns,
@@ -107,6 +107,10 @@ class REPLAgent(BaseModel):
 
         final_response = ""
         current_response = ""
+
+        # Track messages generated during this graph run for session persistence
+        # These will be synced to session.messages after graph completion
+        graph_messages: list[AIMessage | HumanMessage] = []
 
         # Stream events from the graph
         async for event in graph.astream_events(initial_state, version="v2"):
@@ -149,6 +153,8 @@ class REPLAgent(BaseModel):
                         for i, block in enumerate(code_blocks):
                             on_code_block(block.strip(), i)
 
+                    # Track this AI response for session persistence
+                    graph_messages.append(AIMessage(content=current_response))
                     final_response = current_response
                     current_response = ""
 
@@ -158,16 +164,28 @@ class REPLAgent(BaseModel):
                 if node_name == "execute":
                     output = event.get("data", {}).get("output", {})
                     messages = output.get("messages", [])
-                    if messages and on_execution:
-                        # Parse execution results from the message
-                        exec_content = messages[0].content if messages else ""
-                        if "<execution>" in exec_content:
-                            # Extract individual results
-                            on_execution(exec_content, False, 0)
+                    if messages:
+                        # Track execution message for session persistence
+                        exec_msg = messages[0]
+                        graph_messages.append(exec_msg)
 
-        # Save final response to session
+                        if on_execution:
+                            # Parse execution results from the message
+                            exec_content = exec_msg.content if exec_msg else ""
+                            if "<execution>" in exec_content:
+                                # Extract individual results
+                                on_execution(exec_content, False, 0)
+
+        # Persist all messages to session for conversation continuity
+        # Add user message first
+        self.session.add_user_message(prompt)
+
+        # Add all AI responses and execution results from this graph run
+        for msg in graph_messages:
+            self.session.messages.append(msg)
+
+        # Save last exchange for next session
         if final_response:
-            self.session.add_assistant_message(final_response)
             self.session.save_last_session(prompt, final_response)
 
         return final_response
