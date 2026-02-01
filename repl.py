@@ -1022,6 +1022,11 @@ class DynamicPrompt:
             hist_toks = hist_chars // 4  # ~4 chars per token
             parts.append(f"{DIM}hist:{_format_tokens(hist_toks)}")
 
+        # Usage stats (cost)
+        if _usage_stats["num_calls"] > 0:
+            cost = _usage_stats["total_cost_usd"]
+            parts.append(f"{DIM}${NUM}{cost:.2f}{RESET}")
+
         info = " ".join(parts)
         return f"{DIM}{info}{RESET} {CYAN}◈{RESET} " if info else f"{CYAN}◈{RESET} "
 
