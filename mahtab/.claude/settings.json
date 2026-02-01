@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'Tool blocked. /skill repl-tools' >&2; exit 2"
+            "command": "echo 'Tool blocked. @repl-tools' >&2; exit 2"
           }
         ]
       }
