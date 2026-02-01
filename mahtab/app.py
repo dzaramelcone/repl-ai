@@ -40,11 +40,12 @@ class MahtabApp(App):
 
     def compose(self):
         yield Header()
-        yield TabbedContent(id="sessions")
+        with TabbedContent(id="sessions"):
+            # Create initial session during compose
+            session = Session(store=self.store)
+            self.sessions[session.id] = session
+            yield TabPane(f"Session {session.id}", REPLWidget(session), id=f"tab-{session.id}")
         yield Footer()
-
-    def on_mount(self):
-        self.spawn_session()
 
     def spawn_session(
         self,
