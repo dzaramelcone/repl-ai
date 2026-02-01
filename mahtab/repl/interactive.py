@@ -61,13 +61,10 @@ class DynamicPrompt:
         parts = []
 
         # Memory
-        try:
-            import resource
+        import resource
 
-            mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024
-            parts.append(f"{NUM}{mem_mb:.0f}{DIM}MB")
-        except Exception:
-            pass
+        mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024
+        parts.append(f"{NUM}{mem_mb:.0f}{DIM}MB")
 
         # Context size (if 'context' var exists)
         ctx = self.ns.get("context")
@@ -90,20 +87,12 @@ class DynamicPrompt:
         return f"{DIM}{info}{RESET} {CYAN}◈{RESET} " if info else f"{CYAN}◈{RESET} "
 
 
-def run_repl(ns: dict | None = None) -> None:
+def run_repl(ns: dict) -> None:
     """Run the interactive REPL.
 
     Args:
-        ns: Namespace dict to use. If None, uses caller's globals.
+        ns: Namespace dict to use.
     """
-    import inspect
-
-    if ns is None:
-        frame = inspect.currentframe()
-        if frame and frame.f_back:
-            ns = frame.f_back.f_globals
-        else:
-            ns = {}
 
     # Create session and agent
     session = SessionState()
@@ -114,11 +103,11 @@ def run_repl(ns: dict | None = None) -> None:
     store = MemoryStore()
     log, prompt_handler = setup_logging(store)
 
-    agent = create_repl_agent(session=session, console=console)
-    streaming_handler = StreamingHandler(console=console)
+    agent = create_repl_agent(session=session, model="claude-haiku-4-5-20251001", max_turns=5)
+    streaming_handler = StreamingHandler(console=console, chars_per_second=200.0)
 
     # Create wrapper functions for the namespace
-    def ask(prompt: str = "") -> None:
+    def ask(prompt: str) -> None:
         """Ask Claude something. Claude can execute code in your namespace."""
         if not prompt:
             return
@@ -126,39 +115,40 @@ def run_repl(ns: dict | None = None) -> None:
         # Log user input
         log.info(prompt, extra={"tag": "user-chat"})
 
+        streaming_handler.reset()
+
+        def handle_execution(output, is_error):
+            print_output_panel(output, is_error, title="", console=console)
+
+        async def run():
+            return await agent.ask(
+                prompt,
+                streaming_handler=streaming_handler,
+                on_execution=handle_execution,
+            )
+
         try:
-            streaming_handler.reset()
-
-            def handle_execution(output, is_error):
-                print_output_panel(output, is_error)
-
-            async def run():
-                return await agent.ask(
-                    prompt,
-                    streaming_handler=streaming_handler,
-                    on_execution=handle_execution,
-                )
-
             asyncio.run(run())
-
-            # Record usage stats if available
-            if streaming_handler.last_usage:
-                usage = streaming_handler.last_usage
-                session.usage.record(
-                    cost=usage.get("total_cost_usd", 0),
-                    input_tokens=usage.get("input_tokens", 0),
-                    output_tokens=usage.get("output_tokens", 0),
-                    cache_read=usage.get("cache_read_input_tokens", 0),
-                    cache_create=usage.get("cache_creation_input_tokens", 0),
-                )
-
         except KeyboardInterrupt:
             streaming_handler.cleanup()
             sys.stdout.write("\n\033[33m[cancelled]\033[0m\n")
             sys.stdout.flush()
-        finally:
             session.clear_activity()
             print("\033[0m", end="", flush=True)
+            return
+
+        # Record usage stats
+        usage = streaming_handler.last_usage
+        session.usage.record(
+            cost=usage["total_cost_usd"],
+            input_tokens=usage["input_tokens"],
+            output_tokens=usage["output_tokens"],
+            cache_read=usage["cache_read_input_tokens"],
+            cache_create=usage["cache_creation_input_tokens"],
+        )
+
+        session.clear_activity()
+        print("\033[0m", end="", flush=True)
 
     def clear() -> None:
         """Clear conversation history."""
@@ -167,13 +157,13 @@ def run_repl(ns: dict | None = None) -> None:
 
     def usage() -> None:
         """Show cumulative usage stats for this session."""
-        print_usage_panel(session.usage.model_dump())
+        print_usage_panel(session.usage.model_dump(), console=console)
 
-    def ed(content: str = "", path: str | None = None, suffix: str = ".py") -> str:
+    def ed(content: str, path: str, suffix: str) -> str:
         """Edit text in $EDITOR, return the result."""
         return open_in_editor(content, path, suffix, session.messages)
 
-    def read(file_path: str, start: int = 1, end: int | None = None) -> str:
+    def read(file_path: str, start: int, end: int) -> str:
         """Read a file with line numbers."""
         return read_file.invoke({"file_path": file_path, "start": start, "end": end})
 
@@ -183,13 +173,13 @@ def run_repl(ns: dict | None = None) -> None:
 
         return edit_file.invoke({"file_path": file_path, "old": old, "new": new})
 
-    def create(name: str, content: str = "") -> str:
+    def create(name: str, content: str) -> str:
         """Create a new Python module."""
         return create_file.invoke({"name": name, "content": content})
 
-    def skill(name: str, args: str = "") -> str:
+    def skill(name: str, args: str) -> str:
         """Load a skill."""
-        return load_skill.invoke({"name": name, "args": args})
+        return load_skill.invoke({"name": name, "args": args, "skills_dir": session.skills_dir})
 
     # Add functions to namespace
     ns.update(
@@ -216,4 +206,4 @@ def run_repl(ns: dict | None = None) -> None:
     sys.ps2 = "\033[2m⋮\033[0m "
 
     # Print banner
-    print_banner()
+    print_banner(console=console)

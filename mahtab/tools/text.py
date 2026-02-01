@@ -60,7 +60,7 @@ def partition(text: str, n: int = 10) -> list[str]:
 
 
 # Also provide non-decorated versions for direct use in RLM sandbox
-def peek_raw(text: str, n: int = 2000) -> str:
+def peek_raw(text: str, n: int) -> str:
     """Raw peek function without tool decoration."""
     return text[:n]
 
@@ -70,7 +70,7 @@ def grep_raw(text: str, pattern: str) -> list[str]:
     return [line for line in text.split("\n") if re.search(pattern, line, re.IGNORECASE)]
 
 
-def partition_raw(text: str, n: int = 10) -> list[str]:
+def partition_raw(text: str, n: int) -> list[str]:
     """Raw partition function without tool decoration."""
     chunk_size = max(1, len(text) // n)
     return [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]

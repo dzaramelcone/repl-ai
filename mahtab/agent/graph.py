@@ -18,7 +18,7 @@ class ReflectionResult(BaseModel):
 
     is_complete: bool
     reasoning: str
-    next_action: str | None = None
+    next_action: str = ""
 
 
 class AgentState(TypedDict, total=False):
@@ -82,14 +82,13 @@ def execute_node(state: AgentState) -> dict:
     log = logging.getLogger("mahtab")
     session = state["session"]
     results = []
-    # on_execution is an optional callback - not always provided
-    on_execution = state.get("on_execution")
+    on_execution = state["on_execution"]
 
     for block in state["code_blocks"]:
         # Log the code being executed
         log.info(block, extra={"tag": "assistant-repl-in"})
 
-        output, is_error = execute_code(block, session)
+        output, is_error = execute_code(block, session, output_limit=10000)
         results.append((output, is_error))
 
         # Log the execution output
@@ -131,31 +130,24 @@ def _parse_reflection_response(response: str) -> ReflectionResult:
         response: Raw LLM response (should be JSON).
 
     Returns:
-        ReflectionResult, defaulting to incomplete on parse failure.
+        ReflectionResult parsed from JSON.
     """
-    try:
-        # Try to extract JSON from response (may have surrounding text)
-        # Look for JSON object pattern
-        json_match = re.search(r'\{[^{}]*"is_complete"[^{}]*\}', response)
-        if json_match:
-            data = json.loads(json_match.group())
-        else:
-            data = json.loads(response)
+    # Try to extract JSON from response (may have surrounding text)
+    # Look for JSON object pattern
+    json_match = re.search(r'\{[^{}]*"is_complete"[^{}]*\}', response)
+    if json_match:
+        data = json.loads(json_match.group())
+    else:
+        data = json.loads(response)
 
-        return ReflectionResult(
-            is_complete=data.get("is_complete", False),
-            reasoning=data.get("reasoning", ""),
-            next_action=data.get("next_action"),
-        )
-    except (json.JSONDecodeError, KeyError, TypeError):
-        return ReflectionResult(
-            is_complete=False,
-            reasoning="Failed to parse reflection response",
-            next_action="Retry with clearer output",
-        )
+    return ReflectionResult(
+        is_complete=data["is_complete"],
+        reasoning=data["reasoning"],
+        next_action=data.get("next_action") or "",
+    )
 
 
-async def generate_node(state: AgentState, llm, callbacks=None) -> dict:
+async def generate_node(state: AgentState, llm, callbacks) -> dict:
     """Generate a response from the LLM.
 
     Args:
@@ -222,10 +214,10 @@ def should_execute(state: AgentState) -> str:
     Returns:
         "execute" if there are code blocks, "end" otherwise.
     """
-    return "execute" if state.get("code_blocks") else "end"
+    return "execute" if state["code_blocks"] else "end"
 
 
-def should_continue(state: AgentState, max_turns: int = 5) -> str:
+def should_continue(state: AgentState, max_turns: int) -> str:
     """Determine whether to continue generating or end.
 
     Args:
@@ -247,7 +239,7 @@ def should_continue(state: AgentState, max_turns: int = 5) -> str:
     return "generate"
 
 
-def build_agent_graph(llm, max_turns: int = 5):
+def build_agent_graph(llm, max_turns: int):
     """Build the agent StateGraph.
 
     Args:

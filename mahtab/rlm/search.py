@@ -27,7 +27,7 @@ def rlm(
     max_iters: int = 10,
     max_depth: int = 3,
     model: str = "claude-opus-4-20250514",
-    console: Console | None = None,
+    console: Console = default_console,
 ) -> str:
     """Recursive Language Model search.
 
@@ -46,9 +46,6 @@ def rlm(
     Returns:
         The answer found by the LLM, or error message.
     """
-    if console is None:
-        console = default_console
-
     llm = ChatClaudeCLI(model=model)
     history = ""
     output_buffer: list[str] = []
@@ -69,20 +66,26 @@ def rlm(
         return rlm(q, subset, depth=depth + 1, max_iters=max_iters, max_depth=max_depth, model=model, console=console)
 
     result: dict[str, Any] = {"_final": None}
+    output_size = 0
+    CHAR_LIMIT = 40000  # ~10k tokens
+
+    def check_size(size: int, source: str) -> None:
+        if size > CHAR_LIMIT:
+            raise RuntimeError(
+                f"{source} too large ({size:,} chars, ~{size // 4:,} tokens). Summarize instead of returning raw data."
+            )
 
     def FINAL(answer: Any) -> Any:
-        result["_final"] = str(answer)
+        text = str(answer)
+        check_size(len(text), "FINAL answer")
+        result["_final"] = text
         return answer
-
-    output_size = 0
-    OUTPUT_LIMIT = 10000
 
     def capture_print(*args: Any, **_: Any) -> None:
         nonlocal output_size
         text = " ".join(str(a) for a in args)
         output_size += len(text)
-        if output_size > OUTPUT_LIMIT:
-            raise RuntimeError(f"Output too large (>{OUTPUT_LIMIT} chars). Use slicing or summarize.")
+        check_size(output_size, "Print output")
         output_buffer.append(text)
 
     def make_panel(code_str: str, done: bool = False) -> Panel:

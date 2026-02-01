@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 class LimitedOutput:
     """StringIO-like wrapper that raises error if output exceeds limit."""
 
-    def __init__(self, limit: int = 10000):
+    def __init__(self, limit: int):
         self.limit = limit
         self.buffer: list[str] = []
         self.size = 0
@@ -34,7 +34,7 @@ class LimitedOutput:
 def execute_code(
     code: str,
     session: SessionState,
-    output_limit: int = 10000,
+    output_limit: int,
 ) -> tuple[str, bool]:
     """Execute code in the session's namespace.
 
@@ -70,7 +70,7 @@ def execute_code(
 def execute_sandboxed(
     code: str,
     local_vars: dict[str, Any],
-    output_limit: int = 10000,
+    output_limit: int,
 ) -> tuple[str, list[str], Exception | None]:
     """Execute code in a sandboxed environment with limited builtins.
 

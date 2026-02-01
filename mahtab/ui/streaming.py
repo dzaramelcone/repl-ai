@@ -4,88 +4,77 @@ from __future__ import annotations
 
 import sys
 import time
-from typing import TYPE_CHECKING
+from enum import Enum, auto
 
 from langchain_core.callbacks import BaseCallbackHandler
+from rich.console import Console
 from rich.live import Live
-from rich.panel import Panel
 from rich.spinner import Spinner
-from rich.syntax import Syntax
 
 from mahtab.llm import extract_usage
-from mahtab.ui.console import console as default_console
+from mahtab.ui.code_panel import CodePanel
 
-if TYPE_CHECKING:
-    from rich.console import Console
+
+class StreamState(Enum):
+    """State machine states for XML tag parsing."""
+
+    OUTSIDE = auto()
+    IN_CHAT = auto()
+    IN_REPL = auto()
 
 
 class StreamingHandler(BaseCallbackHandler):
-    """Handles streaming output with code panel detection.
-
-    This class manages the streaming output experience including:
-    - Spinner while waiting for first token
-    - Smooth rate-limited text output for consistent streaming feel
-    - Live-updating code panels as code streams in
-
-    Attributes:
-        console: Rich console for output.
-        chars_per_second: Target output rate for smooth streaming.
-    """
+    """Handles streaming output with XML tag parsing."""
 
     # Capture real stdout at class load time, before any redirects
     _real_stdout = sys.stdout
 
-    def __init__(self, console: Console | None = None, chars_per_second: float = 200.0):
+    # Tag patterns
+    _OPEN_CHAT = "<assistant-chat>"
+    _CLOSE_CHAT = "</assistant-chat>"
+    _OPEN_REPL = "<assistant-repl-in>"
+    _CLOSE_REPL = "</assistant-repl-in>"
+
+    def __init__(self, console: Console, chars_per_second: float):
         super().__init__()
-        self.console = console or default_console
-        self._char_interval = 1.0 / chars_per_second  # seconds per character
+        self.console = console
+        self._char_interval = 1.0 / chars_per_second
 
-        # Internal state
+        # State machine
+        self._state = StreamState.OUTSIDE
+        self._buffer = ""
+
+        # UI state
         self._spinner: Live | None = None
-        self._code_live: Live | None = None
-        self._in_code_block = False
-        self._text_buffer = ""
-        self._code_buffer = ""
+        self._code_panel = CodePanel(console)
         self._first_token = True
-
-        # Smooth streaming state
         self._last_output_time: float = 0.0
-        self._last_code_update_time: float = 0.0
-        self._code_update_interval = 0.0333  # ~30 updates per second max
-        self.last_usage = None  # Set by on_llm_end
+        self.last_usage: dict = {}
+
+        # State dispatch table
+        self._handlers = {
+            StreamState.OUTSIDE: self._handle_outside,
+            StreamState.IN_CHAT: self._handle_chat,
+            StreamState.IN_REPL: self._handle_repl,
+        }
 
     def _write(self, text: str) -> None:
-        """Write text to real stdout, bypassing any redirects."""
+        """Write text to real stdout."""
         self._real_stdout.write(text)
         self._real_stdout.flush()
 
     def _write_smooth(self, text: str) -> None:
-        """Write text with rate-limited smooth streaming."""
-        if not text:
-            return
+        """Write text with rate limiting."""
         for char in text:
-            self._write_char_throttled(char)
+            now = time.time()
+            wait = self._char_interval - (now - self._last_output_time)
+            if wait > 0 and self._last_output_time > 0:
+                time.sleep(wait)
+            self._real_stdout.write(char)
+            self._real_stdout.flush()
+            self._last_output_time = time.time()
 
-    def _write_char_throttled(self, char: str) -> None:
-        """Write a single character with throttling."""
-        now = time.time()
-        wait = self._char_interval - (now - self._last_output_time)
-        if wait > 0 and self._last_output_time > 0:
-            time.sleep(wait)
-        self._real_stdout.write(char)
-        self._real_stdout.flush()
-        self._last_output_time = time.time()
-
-    def _make_code_panel(self, code: str, done: bool = False) -> Panel:
-        """Create a code panel for display."""
-        title = "[cyan]Code[/]" if done else "[dim cyan]Writing...[/]"
-        return Panel(
-            Syntax(code or " ", "python", theme="monokai", line_numbers=True),
-            title=title,
-            border_style="cyan" if done else "dim",
-        )
-
-    def start_spinner(self, text: str = "thinking...") -> None:
+    def start_spinner(self, text: str) -> None:
         """Start a spinner while waiting for response."""
         if self._spinner is None:
             self._spinner = Live(
@@ -102,89 +91,103 @@ class StreamingHandler(BaseCallbackHandler):
             self._spinner.stop()
             self._spinner = None
 
-    def process_token(self, token: str) -> None:
-        """Process a streaming token.
+    def _handle_outside(self) -> bool:
+        """Handle OUTSIDE state."""
+        if self._buffer.startswith(self._OPEN_CHAT):
+            self._buffer = self._buffer[len(self._OPEN_CHAT) :]
+            self._state = StreamState.IN_CHAT
+            return True
+        if self._buffer.startswith(self._OPEN_REPL):
+            self._buffer = self._buffer[len(self._OPEN_REPL) :]
+            self._state = StreamState.IN_REPL
+            self._write("\n")
+            self._code_panel.start()
+            return True
+        for tag in (self._OPEN_CHAT, self._OPEN_REPL):
+            if tag.startswith(self._buffer):
+                return False
+        self._buffer = ""
+        return False
 
-        Handles state machine for code block detection and output.
-        """
-        # Stop spinner on first token
+    def _handle_chat(self) -> bool:
+        """Handle IN_CHAT state."""
+        if self._CLOSE_CHAT in self._buffer:
+            idx = self._buffer.find(self._CLOSE_CHAT)
+            self._write_smooth(self._buffer[:idx])
+            self._buffer = self._buffer[idx + len(self._CLOSE_CHAT) :]
+            self._state = StreamState.OUTSIDE
+            return True
+        if "</" in self._buffer:
+            idx = self._buffer.find("</")
+            if idx > 0:
+                self._write_smooth(self._buffer[:idx])
+                self._buffer = self._buffer[idx:]
+            return False
+        self._write_smooth(self._buffer)
+        self._buffer = ""
+        return False
+
+    def _handle_repl(self) -> bool:
+        """Handle IN_REPL state."""
+        if self._CLOSE_REPL in self._buffer:
+            idx = self._buffer.find(self._CLOSE_REPL)
+            self._code_panel.append(self._buffer[:idx])
+            self._code_panel.finish()
+            self._buffer = self._buffer[idx + len(self._CLOSE_REPL) :]
+            self._state = StreamState.OUTSIDE
+            return True
+        if "</" in self._buffer:
+            idx = self._buffer.find("</")
+            if idx > 0:
+                self._code_panel.append(self._buffer[:idx])
+                self._buffer = self._buffer[idx:]
+            self._code_panel.update()
+            return False
+        self._code_panel.append(self._buffer)
+        self._buffer = ""
+        self._code_panel.update()
+        return False
+
+    def process_token(self, token: str) -> None:
+        """Process a streaming token."""
         if self._first_token:
             self.stop_spinner()
             self._first_token = False
-
-        for char in token:
-            if self._in_code_block:
-                self._code_buffer += char
-                # Check for closing ```
-                if self._code_buffer.endswith("```"):
-                    final_code = self._code_buffer[:-3]
-                    if self._code_live:
-                        self._code_live.update(self._make_code_panel(final_code, done=True))
-                        self._code_live.stop()
-                        self._code_live = None
-                    self._in_code_block = False
-                    self._code_buffer = ""
-                # Rate-limited update of live code panel
-                elif self._code_live:
-                    now = time.time()
-                    if now - self._last_code_update_time >= self._code_update_interval:
-                        self._code_live.update(self._make_code_panel(self._code_buffer.rstrip("`")))
-                        self._last_code_update_time = now
-            else:
-                self._text_buffer += char
-                if "```python\n" in self._text_buffer or "```python\r\n" in self._text_buffer:
-                    # Flush text before code block
-                    idx = self._text_buffer.find("```python")
-                    if idx > 0:
-                        self._write_smooth(self._text_buffer[:idx])
-                    self._text_buffer = ""
-                    self._code_buffer = ""
-                    self._in_code_block = True
-                    # Start live code panel
-                    self._write("\n")
-                    self._code_live = Live(
-                        self._make_code_panel(""),
-                        console=self.console,
-                        refresh_per_second=15,
-                    )
-                    self._code_live.start()
-                elif len(self._text_buffer) > 20 and "```" not in self._text_buffer:
-                    # Flush buffered text with smooth streaming
-                    self._write_smooth(self._text_buffer)
-                    self._text_buffer = ""
+        self._buffer += token
+        while self._buffer:
+            if not self._handlers[self._state]():
+                break
 
     def flush(self) -> None:
-        """Flush any remaining buffered text."""
-        if self._text_buffer and not self._in_code_block:
-            self._write_smooth(self._text_buffer)
-            self._text_buffer = ""
+        """Flush remaining buffered content."""
+        if self._state == StreamState.IN_CHAT and self._buffer:
+            self._write_smooth(self._buffer)
+        elif self._state == StreamState.IN_REPL and self._code_panel.is_active:
+            self._code_panel.append(self._buffer)
+            self._code_panel.finish()
+        self._buffer = ""
         self._write("\n")
 
     def reset(self) -> None:
         """Reset state for a new streaming session."""
-        self._text_buffer = ""
-        self._code_buffer = ""
-        self._in_code_block = False
+        self._state = StreamState.OUTSIDE
+        self._buffer = ""
         self._first_token = True
         self._last_output_time = 0.0
-        self._last_code_update_time = 0.0
-        self.last_usage = None
+        self.last_usage = {}
 
     def cleanup(self) -> None:
         """Clean up any active UI elements."""
         self.stop_spinner()
-        if self._code_live:
-            self._code_live.stop()
-            self._code_live = None
+        self._code_panel.cleanup()
 
-    # LangChain callback interface
     def on_llm_new_token(self, token: str, **_kwargs) -> None:
         """Called by LangChain when a new token is generated."""
         self.process_token(token)
 
     def on_llm_start(self, _serialized, _prompts, **_kwargs) -> None:
         """Called by LangChain when LLM starts generating."""
-        self.start_spinner()
+        self.start_spinner("thinking...")
 
     def on_llm_end(self, response, **_kwargs) -> None:
         """Called by LangChain when LLM finishes generating."""

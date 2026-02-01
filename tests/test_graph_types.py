@@ -7,10 +7,9 @@ def test_reflection_result_complete():
     result = ReflectionResult(
         is_complete=True,
         reasoning="Task accomplished",
-        next_action=None,
     )
     assert result.is_complete is True
-    assert result.next_action is None
+    assert result.next_action == ""
 
 
 def test_reflection_result_incomplete():

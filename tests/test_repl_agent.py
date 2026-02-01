@@ -69,18 +69,20 @@ def test_repl_agent_has_graph_after_init():
     assert hasattr(agent._graph, "ainvoke")
 
 
-def test_create_repl_agent_defaults():
-    """Test create_repl_agent with default arguments."""
-    agent = create_repl_agent()
+def test_create_repl_agent_with_all_args():
+    """Test create_repl_agent with explicit arguments."""
+    session = SessionState()
+    agent = create_repl_agent(session=session, model="claude-haiku-4-5-20251001", max_turns=5)
 
-    assert agent.session is not None
+    assert agent.session is session
     assert agent.max_turns == 5
     assert agent._graph is not None
 
 
 def test_create_repl_agent_custom_max_turns():
     """Test create_repl_agent with custom max_turns."""
-    agent = create_repl_agent(max_turns=10)
+    session = SessionState()
+    agent = create_repl_agent(session=session, model="claude-haiku-4-5-20251001", max_turns=10)
 
     assert agent.max_turns == 10
 
@@ -133,7 +135,9 @@ async def test_ask_accepts_streaming_handler():
         "messages": session.messages,
     }
 
-    handler = StreamingHandler()
+    from mahtab.ui.console import console as default_console
+
+    handler = StreamingHandler(console=default_console, chars_per_second=200.0)
 
     with patch.object(agent, "_graph", mock_graph):
         await agent.ask("test prompt", streaming_handler=handler)

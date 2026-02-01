@@ -35,7 +35,14 @@ async def test_agenerate_emits_tokens_to_run_manager():
                 "event": {"type": "content_block_delta", "delta": {"type": "text_delta", "text": " world"}},
             }
         ),
-        json.dumps({"type": "result", "result": "Hello world", "usage": {"input_tokens": 10, "output_tokens": 2}}),
+        json.dumps(
+            {
+                "type": "result",
+                "result": "Hello world",
+                "usage": {"input_tokens": 10, "output_tokens": 2},
+                "total_cost_usd": 0.001,
+            }
+        ),
     ]
 
     async def mock_readline():

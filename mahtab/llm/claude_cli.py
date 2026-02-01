@@ -32,7 +32,7 @@ class ChatClaudeCLI(BaseChatModel):
     model: str = Field(default="claude-opus-4-20250514", description="Claude model identifier")
     max_tokens: int = Field(default=4096, description="Maximum tokens to generate")
     cwd: str = Field(default="/tmp", description="Working directory for subprocess")
-    setting_sources: str | None = Field(default=None, description="Setting sources for Claude CLI")
+    setting_sources: str = Field(default="", description="Setting sources for Claude CLI")
 
     @property
     def _llm_type(self) -> str:
@@ -52,10 +52,9 @@ class ChatClaudeCLI(BaseChatModel):
         """Synchronous generation via CLI subprocess."""
         # Run async version in event loop
         loop = asyncio.new_event_loop()
-        try:
-            return loop.run_until_complete(self._agenerate(messages, stop, run_manager=None, **kwargs))
-        finally:
-            loop.close()
+        result = loop.run_until_complete(self._agenerate(messages, stop, run_manager=None, **kwargs))
+        loop.close()
+        return result
 
     async def _agenerate(
         self,
@@ -74,7 +73,7 @@ class ChatClaudeCLI(BaseChatModel):
 
         generation = ChatGeneration(
             message=AIMessage(content=result),
-            generation_info={"usage": usage} if usage else None,
+            generation_info={"usage": usage},
         )
         return ChatResult(generations=[generation])
 
@@ -88,16 +87,14 @@ class ChatClaudeCLI(BaseChatModel):
         """Synchronous streaming via CLI subprocess with stream-json."""
         # Run async generator in event loop
         loop = asyncio.new_event_loop()
-        try:
-            async_gen = self._astream(messages, stop, run_manager=None, **kwargs)
-            while True:
-                try:
-                    chunk = loop.run_until_complete(async_gen.__anext__())
-                    yield chunk
-                except StopAsyncIteration:
-                    break
-        finally:
-            loop.close()
+        async_gen = self._astream(messages, stop, run_manager=None, **kwargs)
+        while True:
+            try:
+                chunk = loop.run_until_complete(async_gen.__anext__())
+                yield chunk
+            except StopAsyncIteration:
+                break
+        loop.close()
 
     async def _astream(
         self,
@@ -127,7 +124,7 @@ class ChatClaudeCLI(BaseChatModel):
         if system:
             cmd.extend(["--system-prompt", system])
 
-        if self.setting_sources is not None:
+        if self.setting_sources:
             cmd.extend(["--setting-sources", self.setting_sources])
 
         proc = await asyncio.create_subprocess_exec(
@@ -141,36 +138,31 @@ class ChatClaudeCLI(BaseChatModel):
             line_str = line.decode().strip()
             if not line_str:
                 continue
-            try:
-                data = json.loads(line_str)
+            data = json.loads(line_str)
 
-                # Handle streaming deltas
-                if data.get("type") == "stream_event":
-                    event = data.get("event", {})
-                    if event.get("type") == "content_block_delta":
-                        delta = event.get("delta", {})
-                        if delta.get("type") == "text_delta":
-                            text = delta.get("text", "")
-                            if text:
-                                yield ChatGenerationChunk(message=AIMessageChunk(content=text))
+            # Handle streaming deltas
+            if data["type"] == "stream_event":
+                event = data["event"]
+                if event["type"] == "content_block_delta":
+                    delta = event["delta"]
+                    if delta["type"] == "text_delta":
+                        text = delta["text"]
+                        if text:
+                            yield ChatGenerationChunk(message=AIMessageChunk(content=text))
 
-                # Handle final result for usage stats
-                elif data.get("type") == "result":
-                    usage = data.get("usage", {})
-                    if usage:
-                        # Put usage in response_metadata so it's accessible via .astream()
-                        yield ChatGenerationChunk(
-                            message=AIMessageChunk(
-                                content="",
-                                response_metadata={
-                                    "usage": usage,
-                                    "total_cost_usd": data.get("total_cost_usd", 0),
-                                },
-                            ),
-                        )
-
-            except json.JSONDecodeError:
-                pass
+            # Handle final result for usage stats
+            elif data["type"] == "result":
+                usage = data["usage"]
+                # Put usage in response_metadata so it's accessible via .astream()
+                yield ChatGenerationChunk(
+                    message=AIMessageChunk(
+                        content="",
+                        response_metadata={
+                            "usage": usage,
+                            "total_cost_usd": data["total_cost_usd"],
+                        },
+                    ),
+                )
 
         await proc.wait()
 
@@ -180,7 +172,7 @@ class ChatClaudeCLI(BaseChatModel):
 
     async def _call_claude_async(
         self, prompt: str, system: str, run_manager: AsyncCallbackManagerForLLMRun | None = None
-    ) -> tuple[str, dict | None]:
+    ) -> tuple[str, dict]:
         """Call Claude CLI and return full response with usage stats."""
         cmd = [
             "claude",
@@ -197,7 +189,7 @@ class ChatClaudeCLI(BaseChatModel):
         if system:
             cmd.extend(["--system-prompt", system])
 
-        if self.setting_sources is not None:
+        if self.setting_sources:
             cmd.extend(["--setting-sources", self.setting_sources])
 
         proc = await asyncio.create_subprocess_exec(
@@ -208,35 +200,31 @@ class ChatClaudeCLI(BaseChatModel):
         )
 
         full_response = ""
-        usage = None
+        usage: dict = {}
 
         async for line in proc.stdout:
             line_str = line.decode().strip()
             if not line_str:
                 continue
-            try:
-                data = json.loads(line_str)
+            data = json.loads(line_str)
 
-                if data.get("type") == "stream_event":
-                    event = data.get("event", {})
-                    if event.get("type") == "content_block_delta":
-                        delta = event.get("delta", {})
-                        if delta.get("type") == "text_delta":
-                            text = delta.get("text", "")
-                            full_response += text
-                            if text and run_manager:
-                                await run_manager.on_llm_new_token(text)
+            if data["type"] == "stream_event":
+                event = data["event"]
+                if event["type"] == "content_block_delta":
+                    delta = event["delta"]
+                    if delta["type"] == "text_delta":
+                        text = delta["text"]
+                        full_response += text
+                        if text and run_manager:
+                            await run_manager.on_llm_new_token(text)
 
-                elif data.get("type") == "result":
-                    usage = {
-                        **data.get("usage", {}),
-                        "total_cost_usd": data.get("total_cost_usd", 0),
-                    }
-                    if not full_response:
-                        full_response = data.get("result", "")
-
-            except json.JSONDecodeError:
-                pass
+            elif data["type"] == "result":
+                usage = {
+                    **data["usage"],
+                    "total_cost_usd": data["total_cost_usd"],
+                }
+                if not full_response:
+                    full_response = data["result"]
 
         await proc.wait()
 

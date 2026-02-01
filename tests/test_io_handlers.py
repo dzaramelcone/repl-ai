@@ -93,3 +93,51 @@ def test_display_handler_streams_tokens():
     handler.emit(record)
 
     handler.streamer.process_token.assert_called_once_with("tok")
+
+
+def test_display_handler_skips_repl_in():
+    """assistant-repl-in is skipped since it's shown in streaming code panel."""
+    output = StringIO()
+    console = Console(file=output, force_terminal=True)
+    handler = DisplayHandler(console)
+
+    record = logging.LogRecord(
+        name="test", level=logging.INFO, pathname="", lineno=0, msg="x = 42", args=(), exc_info=None
+    )
+    record.tag = "assistant-repl-in"
+    handler.emit(record)
+
+    # Output should be empty - skipped
+    assert output.getvalue() == ""
+
+
+def test_display_handler_skips_assistant_chat():
+    """assistant-chat is skipped since it's shown during streaming."""
+    output = StringIO()
+    console = Console(file=output, force_terminal=True)
+    handler = DisplayHandler(console)
+
+    record = logging.LogRecord(
+        name="test", level=logging.INFO, pathname="", lineno=0, msg="Hello world", args=(), exc_info=None
+    )
+    record.tag = "assistant-chat"
+    handler.emit(record)
+
+    # Output should be empty - skipped (already shown during streaming)
+    assert output.getvalue() == ""
+
+
+def test_display_handler_skips_repl_out():
+    """assistant-repl-out is skipped since on_execution callback shows it."""
+    output = StringIO()
+    console = Console(file=output, force_terminal=True)
+    handler = DisplayHandler(console)
+
+    record = logging.LogRecord(
+        name="test", level=logging.INFO, pathname="", lineno=0, msg="42\n", args=(), exc_info=None
+    )
+    record.tag = "assistant-repl-out"
+    handler.emit(record)
+
+    # Output should be empty - skipped (on_execution shows Output panel)
+    assert output.getvalue() == ""

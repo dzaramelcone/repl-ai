@@ -11,13 +11,13 @@ from mahtab.core.namespace import ensure_cwd_in_path, reload_module_if_imported
 
 
 @tool
-def read_file(file_path: str, start: int = 1, end: int | None = None) -> str:
+def read_file(file_path: str, start: int, end: int) -> str:
     """Read a file and return its contents with line numbers.
 
     Args:
         file_path: Path to the file to read.
         start: Starting line number (1-indexed). Default 1.
-        end: Ending line number (inclusive). Default None (read to end).
+        end: Ending line number (inclusive). Default -1 (read to end).
 
     Returns:
         File contents with line numbers, or error message.
@@ -29,7 +29,7 @@ def read_file(file_path: str, start: int = 1, end: int | None = None) -> str:
 
     lines = path.read_text().split("\n")
 
-    if end is None:
+    if end < 0:
         end = len(lines)
 
     start = max(1, start)
@@ -86,7 +86,7 @@ def edit_file(file_path: str, old: str, new: str) -> str:
 
 
 @tool
-def create_file(name: str, content: str = "") -> str:
+def create_file(name: str, content: str) -> str:
     """Create a new Python module that can be imported.
 
     Args:
@@ -126,14 +126,14 @@ def create_file(name: str, content: str = "") -> str:
     return f"OK: created {file_path}\n→ import {name}"
 
 
-def open_in_editor(content: str = "", path: str | None = None, suffix: str = ".py", history: list | None = None) -> str:
+def open_in_editor(content: str, path: str, suffix: str, history: list) -> str:
     """Edit text in $EDITOR, return the result.
 
     Args:
         content: Initial content to edit (ignored if path is provided).
         path: If provided, edit this file directly instead of a temp file.
         suffix: File extension for temp file (default: .py for syntax highlighting).
-        history: Optional conversation history for context.
+        history: Conversation history for context.
 
     Returns:
         The edited content as a string.
@@ -184,12 +184,10 @@ def open_in_editor(content: str = "", path: str | None = None, suffix: str = ".p
         f.write(full_content)
         temp_path = f.name
 
-    try:
-        subprocess.call([editor, temp_path])
-        with open(temp_path) as f:
-            result = f.read()
-    finally:
-        os.unlink(temp_path)
+    subprocess.call([editor, temp_path])
+    with open(temp_path) as f:
+        result = f.read()
+    os.unlink(temp_path)
 
     # Strip header - find the marker line and return everything after
     marker = "# --- YOUR MESSAGE BELOW"

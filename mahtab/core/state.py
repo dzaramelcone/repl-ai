@@ -23,11 +23,11 @@ class UsageStats(BaseModel):
 
     def record(
         self,
-        cost: float = 0.0,
-        input_tokens: int = 0,
-        output_tokens: int = 0,
-        cache_read: int = 0,
-        cache_create: int = 0,
+        cost: float,
+        input_tokens: int,
+        output_tokens: int,
+        cache_read: int,
+        cache_create: int,
     ) -> None:
         """Record usage from an API call."""
         self.total_cost_usd += cost
@@ -60,10 +60,13 @@ class SessionState(BaseModel):
     skills_dir: Path = Field(default_factory=lambda: Path("~/.mahtab/skills").expanduser())
     last_session_file: Path = Field(default_factory=lambda: Path("~/.mahtab/last_session.json").expanduser())
 
-    def init_namespace(self, globals_dict: dict | None = None, locals_dict: dict | None = None) -> None:
-        """Initialize with caller's namespace."""
-        self.globals_ns = globals_dict if globals_dict is not None else {}
-        self.locals_ns = locals_dict if locals_dict is not None else self.globals_ns
+    def init_namespace(self, globals_dict: dict, locals_dict: dict) -> None:
+        """Initialize with caller's namespace.
+
+        For a shared namespace, pass the same dict for both globals and locals.
+        """
+        self.globals_ns = globals_dict
+        self.locals_ns = locals_dict
 
     def add_user_message(self, content: str) -> None:
         """Add a user message to history."""
@@ -85,7 +88,7 @@ class SessionState(BaseModel):
         """Clear REPL activity buffer."""
         self.repl_activity.clear()
 
-    def get_activity_context(self, max_chars: int = 4000) -> str:
+    def get_activity_context(self, max_chars: int) -> str:
         """Get recent REPL activity, truncated to max_chars."""
         if not self.repl_activity:
             return ""
@@ -108,16 +111,13 @@ class SessionState(BaseModel):
         """Load last session context as XML."""
         if not self.last_session_file.exists():
             return ""
-        try:
-            data = json.loads(self.last_session_file.read_text())
-            return f"""<prior_session timestamp="{data.get("timestamp", "unknown")}">
-<human>{data.get("user", "")}</human>
-<assistant>{data.get("assistant", "")}</assistant>
+        data = json.loads(self.last_session_file.read_text())
+        return f"""<prior_session timestamp="{data["timestamp"]}">
+<human>{data["user"]}</human>
+<assistant>{data["assistant"]}</assistant>
 </prior_session>"""
-        except Exception:
-            return ""
 
-    def summarize_namespace(self, max_vars: int = 30) -> str:
+    def summarize_namespace(self, max_vars: int) -> str:
         """Summarize variables in the namespace."""
         if not self.globals_ns:
             return "(empty)"
@@ -126,17 +126,14 @@ class SessionState(BaseModel):
         for name, val in self.globals_ns.items():
             if name.startswith("_"):
                 continue
-            try:
-                typ = type(val).__name__
-                if isinstance(val, int | float | str | bool | type(None)):
-                    rep = repr(val)[:50]
-                elif isinstance(val, list | dict | set | tuple):
-                    rep = f"{typ} with {len(val)} items"
-                else:
-                    rep = typ
-                lines.append(f"  {name}: {rep}")
-            except Exception:
-                lines.append(f"  {name}: <unknown>")
+            typ = type(val).__name__
+            if isinstance(val, int | float | str | bool | type(None)):
+                rep = repr(val)[:50]
+            elif isinstance(val, list | dict | set | tuple):
+                rep = f"{typ} with {len(val)} items"
+            else:
+                rep = typ
+            lines.append(f"  {name}: {rep}")
 
         return "\n".join(lines[:max_vars]) or "(no user variables)"
 

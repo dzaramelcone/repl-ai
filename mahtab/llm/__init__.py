@@ -10,22 +10,17 @@ from mahtab.llm.prompts import (
 )
 
 
-def extract_usage(response) -> dict | None:
-    """Extract usage dict from LLM response if available.
+def extract_usage(response) -> dict:
+    """Extract usage dict from LLM response.
 
     Args:
         response: LLMResult or ChatResult from LangChain.
 
     Returns:
         Usage dict with input_tokens, output_tokens, total_cost_usd, etc.
-        Returns None if usage is not available.
     """
-    if not response or not hasattr(response, "generations") or not response.generations:
-        return None
-    gen = response.generations[0]
-    if not hasattr(gen, "generation_info") or not gen.generation_info:
-        return None
-    return gen.generation_info.get("usage")
+    gen = response.generations[0][0]
+    return gen.generation_info["usage"]
 
 
 __all__ = [

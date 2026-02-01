@@ -10,7 +10,7 @@ from langchain_core.tools import tool
 DEFAULT_SKILLS_DIR = Path("~/.mahtab/skills").expanduser()
 
 
-def load_skill_descriptions(skills_dir: Path | None = None) -> str:
+def load_skill_descriptions(skills_dir: Path) -> str:
     """Load skill descriptions from the skills directory.
 
     Args:
@@ -19,9 +19,6 @@ def load_skill_descriptions(skills_dir: Path | None = None) -> str:
     Returns:
         Formatted string of skill names and descriptions.
     """
-    if skills_dir is None:
-        skills_dir = DEFAULT_SKILLS_DIR
-
     if not skills_dir.exists():
         return ""
 
@@ -33,15 +30,12 @@ def load_skill_descriptions(skills_dir: Path | None = None) -> str:
         # Parse YAML frontmatter
         desc = name  # Default description
         if content.startswith("---"):
-            try:
-                end = content.index("---", 3)
-                frontmatter = content[3:end].strip()
-                for line in frontmatter.split("\n"):
-                    if line.startswith("description:"):
-                        desc = line.split(":", 1)[1].strip().strip("\"'")
-                        break
-            except ValueError:
-                pass
+            end = content.index("---", 3)
+            frontmatter = content[3:end].strip()
+            for line in frontmatter.split("\n"):
+                if line.startswith("description:"):
+                    desc = line.split(":", 1)[1].strip().strip("\"'")
+                    break
 
         descriptions.append(f"  {name}: {desc}")
 
@@ -51,7 +45,7 @@ def load_skill_descriptions(skills_dir: Path | None = None) -> str:
 
 
 @tool
-def load_skill(name: str, args: str = "", skills_dir: Path | None = None) -> str:
+def load_skill(name: str, args: str, skills_dir: Path) -> str:
     """Load and return a skill's full content.
 
     Skills are markdown files in ~/.mahtab/skills/ with optional YAML frontmatter.
@@ -65,9 +59,6 @@ def load_skill(name: str, args: str = "", skills_dir: Path | None = None) -> str
     Returns:
         The skill content with arguments substituted, or error message.
     """
-    if skills_dir is None:
-        skills_dir = DEFAULT_SKILLS_DIR
-
     skill_file = skills_dir / f"{name}.md"
     if not skill_file.exists():
         return f"Error: skill '{name}' not found in {skills_dir}"
@@ -76,11 +67,8 @@ def load_skill(name: str, args: str = "", skills_dir: Path | None = None) -> str
 
     # Strip frontmatter
     if content.startswith("---"):
-        try:
-            end = content.index("---", 3)
-            content = content[end + 3 :].strip()
-        except ValueError:
-            pass
+        end = content.index("---", 3)
+        content = content[end + 3 :].strip()
 
     # Replace $ARGUMENTS placeholder
     content = content.replace("$ARGUMENTS", args)
@@ -88,7 +76,7 @@ def load_skill(name: str, args: str = "", skills_dir: Path | None = None) -> str
     return content
 
 
-def load_claude_sessions(projects_path: str = "~/.claude/projects") -> str:
+def load_claude_sessions(projects_path: str) -> str:
     """Load all JSONL files from Claude projects into one big context.
 
     Args:

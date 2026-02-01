@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class Store(Protocol):
     """Protocol for message stores."""
 
-    def append(self, data: bytes) -> None: ...
+    def append(self, _data: bytes) -> None: ...
 
 
 class PromptHandler(logging.Handler):
@@ -55,11 +55,14 @@ class DisplayHandler(logging.Handler):
         super().__init__()
         self.console = console
         self.setFormatter(RichFormatter())
-        self.streamer = StreamingHandler(console)
+        self.streamer = StreamingHandler(console=console, chars_per_second=200.0)
 
     def emit(self, record: logging.LogRecord) -> None:
         match record.tag:
             case "assistant-chat-stream":
                 self.streamer.process_token(record.getMessage())
+            case "assistant-chat" | "assistant-repl-in" | "assistant-repl-out":
+                # Skip - already shown during streaming / on_execution callback
+                pass
             case _:
                 self.console.print(self.format(record))

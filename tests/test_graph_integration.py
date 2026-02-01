@@ -14,7 +14,7 @@ class MockLLM:
         self.responses = responses
         self.call_count = 0
 
-    async def ainvoke(self, _messages, config=None):  # noqa: ARG002
+    async def ainvoke(self, _messages, _config=None):
         response = self.responses[self.call_count % len(self.responses)]
         self.call_count += 1
         return AIMessage(content=response)
@@ -32,6 +32,7 @@ async def test_graph_text_only_response():
         "original_prompt": "hello",
         "turn_count": 0,
         "session": SessionState(),
+        "on_execution": None,
     }
 
     result = await graph.ainvoke(initial_state)
@@ -59,6 +60,7 @@ async def test_graph_code_then_complete():
         "original_prompt": "set x to 42 and print it",
         "turn_count": 0,
         "session": session,
+        "on_execution": None,
     }
 
     result = await graph.ainvoke(initial_state)
@@ -88,6 +90,7 @@ async def test_graph_multi_turn():
         "original_prompt": "set x and print it",
         "turn_count": 0,
         "session": session,
+        "on_execution": None,
     }
 
     result = await graph.ainvoke(initial_state)
@@ -115,6 +118,7 @@ async def test_graph_max_turns_limit():
         "original_prompt": "infinite task",
         "turn_count": 0,
         "session": SessionState(),
+        "on_execution": None,
     }
 
     result = await graph.ainvoke(initial_state)

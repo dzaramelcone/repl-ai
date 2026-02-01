@@ -49,6 +49,7 @@ def test_execute_node_success():
         "code_blocks": ["x = 42", "print(x)"],
         "execution_results": [],
         "session": session,
+        "on_execution": None,
     }
     result = execute_node(state)
     assert len(result["execution_results"]) == 2
@@ -65,6 +66,7 @@ def test_execute_node_error():
         "code_blocks": ["1/0"],
         "execution_results": [],
         "session": session,
+        "on_execution": None,
     }
     result = execute_node(state)
     assert len(result["execution_results"]) == 1
@@ -81,6 +83,7 @@ def test_execute_node_updates_namespace():
         "code_blocks": ["my_var = 'hello'"],
         "execution_results": [],
         "session": session,
+        "on_execution": None,
     }
     execute_node(state)
     assert session.locals_ns.get("my_var") == "hello"
@@ -104,13 +107,15 @@ def test_reflect_node_parses_incomplete():
     assert result.next_action == "Add validation"
 
 
-def test_reflect_node_handles_malformed_json():
+def test_reflect_node_crashes_on_malformed_json():
+    """Malformed JSON should crash - fail fast, no defensive handling."""
+    import json
+
     from mahtab.agent.graph import _parse_reflection_response
 
     response = "This is not JSON at all"
-    result = _parse_reflection_response(response)
-    assert result.is_complete is False
-    assert "parse" in result.reasoning.lower() or "invalid" in result.reasoning.lower()
+    with pytest.raises(json.JSONDecodeError):
+        _parse_reflection_response(response)
 
 
 @pytest.mark.asyncio
@@ -128,7 +133,7 @@ async def test_generate_node_calls_llm():
         "turn_count": 0,
     }
 
-    result = await generate_node(state, mock_llm)
+    result = await generate_node(state, mock_llm, callbacks=[])
     assert "```python" in result["current_response"]
     assert result["turn_count"] == 1
     mock_llm.ainvoke.assert_called_once()

@@ -7,7 +7,6 @@ from typing import Any
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
-from rich.console import Console
 
 from mahtab.agent.graph import AgentState, build_agent_graph
 from mahtab.core.state import SessionState
@@ -15,6 +14,7 @@ from mahtab.llm.claude_cli import ChatClaudeCLI
 from mahtab.llm.prompts import build_repl_system_prompt
 from mahtab.tools.skills import load_skill_descriptions
 from mahtab.ui import StreamingHandler
+from mahtab.ui.console import console as default_console
 
 
 class REPLAgent(BaseModel):
@@ -30,7 +30,6 @@ class REPLAgent(BaseModel):
     Attributes:
         session: The session state containing namespace and history.
         llm: The language model to use (ChatClaudeCLI by default).
-        console: Rich console for output (optional, for streaming).
         max_turns: Maximum number of turns in the agentic loop.
     """
 
@@ -38,7 +37,6 @@ class REPLAgent(BaseModel):
 
     session: SessionState
     llm: BaseChatModel = Field(default_factory=ChatClaudeCLI)
-    console: Console | None = None
     max_turns: int = 5
 
     _graph: Any = PrivateAttr(default=None)
@@ -65,9 +63,9 @@ class REPLAgent(BaseModel):
         """
         # Build system prompt with current context
         system_prompt = build_repl_system_prompt(
-            var_summary=self.session.summarize_namespace(),
+            var_summary=self.session.summarize_namespace(max_vars=30),
             skills_description=load_skill_descriptions(self.session.skills_dir),
-            repl_context=self.session.get_activity_context(),
+            repl_context=self.session.get_activity_context(max_chars=4000),
             prior_session=self.session.load_last_session(),
         )
 
@@ -86,7 +84,7 @@ class REPLAgent(BaseModel):
         }
 
         # Run the graph
-        callbacks = [streaming_handler or StreamingHandler()]
+        callbacks = [streaming_handler or StreamingHandler(console=default_console, chars_per_second=200.0)]
         result = await self._graph.ainvoke(initial_state, config={"callbacks": callbacks})
 
         # Update session with final messages
@@ -121,12 +119,16 @@ class REPLAgent(BaseModel):
         import asyncio
 
         loop = asyncio.new_event_loop()
-        try:
-            return loop.run_until_complete(
-                self.ask(prompt, streaming_handler=streaming_handler or StreamingHandler(), on_execution=on_execution)
+        result = loop.run_until_complete(
+            self.ask(
+                prompt,
+                streaming_handler=streaming_handler
+                or StreamingHandler(console=default_console, chars_per_second=200.0),
+                on_execution=on_execution,
             )
-        finally:
-            loop.close()
+        )
+        loop.close()
+        return result
 
     def clear_history(self) -> None:
         """Clear conversation history."""
@@ -134,29 +136,24 @@ class REPLAgent(BaseModel):
 
 
 def create_repl_agent(
-    session: SessionState | None = None,
-    model: str = "claude-haiku-4-5-20251001",
-    console: Console | None = None,
-    max_turns: int = 5,
+    session: SessionState,
+    model: str,
+    max_turns: int,
 ) -> REPLAgent:
     """Create a REPL agent with the given configuration.
 
     Args:
-        session: Session state. If None, creates a new one.
+        session: Session state.
         model: Claude model to use.
-        console: Rich console for output.
         max_turns: Maximum turns in the agentic loop.
 
     Returns:
         Configured REPLAgent instance.
     """
-    session = session or SessionState()
-
     llm = ChatClaudeCLI(model=model)
 
     return REPLAgent(
         session=session,
         llm=llm,
-        console=console,
         max_turns=max_turns,
     )

@@ -7,14 +7,12 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.text import Text
 
-from mahtab.ui.console import console as default_console
-
 
 def print_code_panel(
     code: str,
-    title: str = "Code",
-    console: Console | None = None,
-    done: bool = True,
+    title: str,
+    console: Console,
+    done: bool,
 ) -> None:
     """Print syntax-highlighted Python code in a panel.
 
@@ -24,9 +22,6 @@ def print_code_panel(
         console: Console to use. Defaults to global console.
         done: Whether the code is complete (affects styling).
     """
-    if console is None:
-        console = default_console
-
     syntax = Syntax(
         code or " ",
         "python",
@@ -53,23 +48,20 @@ def print_code_panel(
 
 def print_output_panel(
     output: str,
-    is_error: bool = False,
-    title: str | None = None,
-    console: Console | None = None,
+    is_error: bool,
+    title: str,
+    console: Console,
 ) -> None:
     """Print execution output in a panel.
 
     Args:
         output: The output text to display.
         is_error: Whether this is an error output.
-        title: Panel title. Defaults to "Error" or "Output".
+        title: Panel title. Empty string defaults to "Error" or "Output".
         console: Console to use. Defaults to global console.
     """
-    if console is None:
-        console = default_console
-
     style = "red" if is_error else "green"
-    if title is None:
+    if not title:
         title = "Error" if is_error else "Output"
 
     console.print(
@@ -83,9 +75,9 @@ def print_output_panel(
 
 def print_final_panel(
     result: str,
-    depth: int = 0,
-    max_chars: int = 500,
-    console: Console | None = None,
+    depth: int,
+    max_chars: int,
+    console: Console,
 ) -> None:
     """Print a final result panel (used in RLM).
 
@@ -95,9 +87,6 @@ def print_final_panel(
         max_chars: Maximum characters to show.
         console: Console to use. Defaults to global console.
     """
-    if console is None:
-        console = default_console
-
     truncated = result[:max_chars]
     if len(result) > max_chars:
         truncated += "..."
@@ -111,15 +100,12 @@ def print_final_panel(
     )
 
 
-def print_banner(console: Console | None = None) -> None:
+def print_banner(console: Console) -> None:
     """Print the REPL welcome banner.
 
     Args:
         console: Console to use. Defaults to global console.
     """
-    if console is None:
-        console = default_console
-
     console.print()
     console.print(
         Panel(
@@ -154,15 +140,12 @@ def print_banner(console: Console | None = None) -> None:
     console.print()
 
 
-def print_modal_banner(console: Console | None = None) -> None:
+def print_modal_banner(console: Console) -> None:
     """Print the modal REPL banner.
 
     Args:
         console: Console to use. Defaults to global console.
     """
-    if console is None:
-        console = default_console
-
     console.print()
     console.print(
         Panel(
@@ -183,16 +166,13 @@ def print_modal_banner(console: Console | None = None) -> None:
     console.print()
 
 
-def print_usage_panel(usage_stats: dict, console: Console | None = None) -> None:
+def print_usage_panel(usage_stats: dict, console: Console) -> None:
     """Print usage statistics panel.
 
     Args:
         usage_stats: Dictionary of usage stats from UsageStats.model_dump().
         console: Console to use. Defaults to global console.
     """
-    if console is None:
-        console = default_console
-
     s = usage_stats
     console.print(
         Panel(

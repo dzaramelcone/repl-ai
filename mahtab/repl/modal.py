@@ -8,11 +8,10 @@ import rlcompleter
 
 from rich.console import Console
 
-from mahtab.agent.repl_agent import create_repl_agent
+from mahtab.agent.repl_agent import REPLAgent, create_repl_agent
 from mahtab.core.state import SessionState
 from mahtab.rlm.search import rlm
 from mahtab.tools.skills import load_claude_sessions
-from mahtab.ui.console import console as default_console
 from mahtab.ui.panels import print_modal_banner
 
 
@@ -31,16 +30,17 @@ class ModalREPL(code_module.InteractiveConsole):
 
     def __init__(
         self,
-        session: SessionState | None = None,
-        console: Console | None = None,
-        locals: dict | None = None,
+        session: SessionState,
+        console: Console,
+        locals: dict,
     ):
         super().__init__(locals)
 
-        self.session = session or SessionState()
-        self.console = console or default_console
+        self.session = session
+        self.console = console
         self.ask_mode = False
-        self._agent = None
+        # Lazy-initialized by @property agent
+        self._agent_cache: REPLAgent = None  # type: ignore[assignment]
 
         # Enable tab completion
         if locals:
@@ -48,11 +48,11 @@ class ModalREPL(code_module.InteractiveConsole):
             readline.parse_and_bind("tab: complete")
 
     @property
-    def agent(self):
+    def agent(self) -> REPLAgent:
         """Lazy-load the agent."""
-        if self._agent is None:
-            self._agent = create_repl_agent(session=self.session, console=self.console)
-        return self._agent
+        if self._agent_cache is None:
+            self._agent_cache = create_repl_agent(session=self.session, model="claude-haiku-4-5-20251001", max_turns=5)
+        return self._agent_cache
 
     @property
     def prompt(self) -> str:
@@ -67,7 +67,7 @@ class ModalREPL(code_module.InteractiveConsole):
         """Get the continuation prompt."""
         return "\033[2m⋮\033[0m "
 
-    def runsource(self, source: str, filename: str = "<input>", symbol: str = "single") -> bool:
+    def runsource(self, source: str, filename: str, symbol: str) -> bool:
         """Execute source code or send to Claude.
 
         Args:
@@ -98,7 +98,7 @@ class ModalREPL(code_module.InteractiveConsole):
             # Normal Python execution
             return super().runsource(source, filename, symbol)
 
-    def interact(self, banner: str | None = None, exitmsg: str | None = None) -> None:
+    def interact(self, banner: str, exitmsg: str) -> None:
         """Custom interact loop with dynamic prompts.
 
         Args:
@@ -115,11 +115,7 @@ class ModalREPL(code_module.InteractiveConsole):
                     prompt = self.prompt2
                 else:
                     prompt = self.prompt
-                try:
-                    line = input(prompt)
-                except EOFError:
-                    self.write("\n")
-                    break
+                line = input(prompt)
                 more = self.push(line)
             except KeyboardInterrupt:
                 self.console.print("\n[dim]KeyboardInterrupt[/]")
@@ -130,19 +126,13 @@ class ModalREPL(code_module.InteractiveConsole):
             self.write(f"{exitmsg}\n")
 
 
-def run_modal_repl(ns: dict | None = None, console: Console | None = None) -> None:
+def run_modal_repl(ns: dict, console: Console) -> None:
     """Start the modal REPL with the given namespace.
 
     Args:
-        ns: Namespace dict to use. If None, uses empty dict.
+        ns: Namespace dict to use.
         console: Rich console for output.
     """
-    if ns is None:
-        ns = {}
-
-    if console is None:
-        console = default_console
-
     # Create session
     session = SessionState()
     session.init_namespace(ns, ns)
@@ -169,4 +159,4 @@ def run_modal_repl(ns: dict | None = None, console: Console | None = None) -> No
     print_modal_banner(console)
 
     # Start REPL
-    repl.interact()
+    repl.interact(banner="", exitmsg="")
