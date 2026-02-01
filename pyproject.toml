@@ -15,7 +15,14 @@ dependencies = [
 mahtab = "mahtab.repl.interactive:run_repl"
 
 [dependency-groups]
-dev = ["ruff", "pre-commit", "pytest>=8.0.0", "pytest-asyncio>=0.23.0"]
+dev = [
+    "ruff",
+    "pre-commit",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "radon>=6.0.1",
+    "pylint>=3.0.0",
+]
 
 [tool.ruff]
 line-length = 120
@@ -38,3 +45,10 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["mahtab"]
+
+[tool.pylint.main]
+load-plugins = ["lint.no_mocking"]
+
+[tool.pylint."messages control"]
+enable = ["no-mocking"]
+disable = ["all"]
