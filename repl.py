@@ -205,19 +205,21 @@ def _print_output(output: str, is_error: bool = False):
     console.print(Panel(output, title=f"[bold {style}]{title}[/]", border_style=style))
 
 
-def ask(prompt: str = "", max_turns: int = 5) -> str:
+def ask(prompt: str = "", max_turns: int = 5) -> None:
     """
     Ask Claude something. Claude can execute code in your namespace.
     Streams response to stdout. Returns final text response.
     """
     try:
-        return asyncio.run(_ask_async(prompt, max_turns))
+        asyncio.run(_ask_async(prompt, max_turns))
+        return
     except KeyboardInterrupt:
         import sys
 
         sys.stdout.write("\n\033[33m[cancelled]\033[0m\n")
         sys.stdout.flush()
-        return "(cancelled)"
+        print("(cancelled)")
+        return
     finally:
         _clear_repl_activity()
         print("\033[0m", end="", flush=True)
