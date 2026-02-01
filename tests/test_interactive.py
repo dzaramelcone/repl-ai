@@ -160,7 +160,7 @@ class TestInteractiveREPL:
         def ask_func(text):
             calls.append(text)
 
-        repl = InteractiveREPL(locals=ns, prompt_obj=prompt_obj, ask_func=ask_func)
+        repl = InteractiveREPL(locals=ns, prompt_obj=prompt_obj, ask_func=ask_func, log=log)
         repl._ask_calls = calls  # Store for verification
         return repl
 

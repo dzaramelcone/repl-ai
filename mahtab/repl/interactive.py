@@ -146,10 +146,11 @@ class InteractiveREPL(code.InteractiveConsole):
         ask_func: Function to call for chat mode input.
     """
 
-    def __init__(self, locals: dict, prompt_obj: DynamicPrompt, ask_func):
+    def __init__(self, locals: dict, prompt_obj: DynamicPrompt, ask_func, log):
         super().__init__(locals)
         self.prompt_obj = prompt_obj
         self.ask_func = ask_func
+        self.log = log
 
         # Enable tab completion
         if locals:
@@ -157,7 +158,11 @@ class InteractiveREPL(code.InteractiveConsole):
             readline.parse_and_bind("tab: complete")
 
     def showtraceback(self) -> None:
-        """Print traceback using Rich."""
+        """Print traceback using Rich and log it."""
+        import traceback
+
+        tb_text = "".join(traceback.format_exception(*sys.exc_info()))
+        self.log.info(tb_text, extra={"tag": "user-repl-out"})
         console.print_exception(show_locals=False)
 
     def runcode(self, code) -> None:
@@ -394,5 +399,5 @@ def run_repl(ns: dict) -> None:
     print_banner(console=console)
 
     # Create and run modal REPL
-    repl = InteractiveREPL(locals=ns, prompt_obj=prompt_obj, ask_func=ask)
+    repl = InteractiveREPL(locals=ns, prompt_obj=prompt_obj, ask_func=ask, log=log)
     repl.interact()
