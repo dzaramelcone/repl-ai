@@ -13,6 +13,13 @@ from rich.live import Live
 from rich.spinner import Spinner
 
 from mahtab.llm import extract_usage
+from mahtab.ui.buffer_parser import (
+    find_close_tag,
+    find_code_fence_end,
+    find_code_fence_start,
+    find_partial_close,
+    has_partial_backticks,
+)
 from mahtab.ui.code_panel import CodePanel
 from mahtab.ui.xml_panel import XmlPanel
 
@@ -24,6 +31,7 @@ class StreamState(Enum):
     IN_CHAT = auto()
     IN_REPL = auto()
     IN_XML = auto()
+    IN_CODE_BLOCK = auto()  # Markdown code block inside chat
 
 
 class StreamingHandler(BaseCallbackHandler):
@@ -47,11 +55,13 @@ class StreamingHandler(BaseCallbackHandler):
         self._first_token = True
         self._last_output_time: float = 0.0
         self.last_usage: dict = {}
+        self._md_code_panel = CodePanel(console)  # For markdown code blocks
         self._handlers = {
             StreamState.OUTSIDE: self._handle_outside,
             StreamState.IN_CHAT: self._handle_chat,
             StreamState.IN_REPL: self._handle_repl,
             StreamState.IN_XML: self._handle_xml,
+            StreamState.IN_CODE_BLOCK: self._handle_code_block,
         }
 
     def _write(self, text: str) -> None:
@@ -141,17 +151,30 @@ class StreamingHandler(BaseCallbackHandler):
 
     def _handle_chat(self) -> bool:
         """Handle IN_CHAT state."""
-        if self._CLOSE_CHAT in self._buffer:
-            idx = self._buffer.find(self._CLOSE_CHAT)
-            self._write_smooth(self._buffer[:idx])
-            self._buffer = self._buffer[idx + len(self._CLOSE_CHAT) :]
+        content, remaining = find_close_tag(self._buffer, self._CLOSE_CHAT)
+        if content is not None:
+            self._write_smooth(content)
+            self._buffer = remaining
             self._state = StreamState.OUTSIDE
             return True
-        if "</" in self._buffer:
-            idx = self._buffer.find("</")
-            if idx > 0:
-                self._write_smooth(self._buffer[:idx])
-                self._buffer = self._buffer[idx:]
+        lang, remaining = find_code_fence_start(self._buffer)
+        if lang is not None:
+            self._buffer = remaining
+            self._state = StreamState.IN_CODE_BLOCK
+            self._write("\n")
+            self._md_code_panel.start(lang)
+            return True
+        before, backticks = has_partial_backticks(self._buffer)
+        if backticks:
+            if before:
+                self._write_smooth(before)
+            self._buffer = backticks
+            return False
+        before, partial = find_partial_close(self._buffer)
+        if partial.startswith("</"):
+            if before:
+                self._write_smooth(before)
+            self._buffer = partial
             return False
         self._write_smooth(self._buffer)
         self._buffer = ""
@@ -159,45 +182,55 @@ class StreamingHandler(BaseCallbackHandler):
 
     def _handle_repl(self) -> bool:
         """Handle IN_REPL state."""
-        if self._CLOSE_REPL in self._buffer:
-            idx = self._buffer.find(self._CLOSE_REPL)
-            self._code_panel.append(self._buffer[:idx])
+        content, remaining = find_close_tag(self._buffer, self._CLOSE_REPL)
+        if content is not None:
+            self._code_panel.append(content)
             self._code_panel.finish()
-            self._buffer = self._buffer[idx + len(self._CLOSE_REPL) :]
+            self._buffer = remaining
             self._state = StreamState.OUTSIDE
             return True
-        if "</" in self._buffer:
-            idx = self._buffer.find("</")
-            if idx > 0:
-                self._code_panel.append(self._buffer[:idx])
-                self._buffer = self._buffer[idx:]
-            self._code_panel.update()
-            return False
-        self._code_panel.append(self._buffer)
-        self._buffer = ""
+        before, partial = find_partial_close(self._buffer)
+        if before:
+            self._code_panel.append(before)
+            self._buffer = partial
+        else:
+            self._code_panel.append(self._buffer)
+            self._buffer = ""
         self._code_panel.update()
         return False
 
     def _handle_xml(self) -> bool:
         """Handle IN_XML state for generic XML blocks."""
         close_tag = f"</{self._xml_panel.tag}>"
-        if close_tag in self._buffer:
-            idx = self._buffer.find(close_tag)
-            self._xml_panel.append(self._buffer[:idx])
+        content, remaining = find_close_tag(self._buffer, close_tag)
+        if content is not None:
+            self._xml_panel.append(content)
             self._xml_panel.finish()
-            self._buffer = self._buffer[idx + len(close_tag) :]
+            self._buffer = remaining
             self._state = StreamState.OUTSIDE
             return True
-        if "</" in self._buffer:
-            idx = self._buffer.find("</")
-            if idx > 0:
-                self._xml_panel.append(self._buffer[:idx])
-                self._buffer = self._buffer[idx:]
-            self._xml_panel.update()
-            return False
-        self._xml_panel.append(self._buffer)
-        self._buffer = ""
+        before, partial = find_partial_close(self._buffer)
+        if before:
+            self._xml_panel.append(before)
+            self._buffer = partial
+        else:
+            self._xml_panel.append(self._buffer)
+            self._buffer = ""
         self._xml_panel.update()
+        return False
+
+    def _handle_code_block(self) -> bool:
+        """Handle IN_CODE_BLOCK state for markdown code blocks."""
+        content, remaining = find_code_fence_end(self._buffer)
+        if content is not None:
+            self._md_code_panel.append(content)
+            self._md_code_panel.finish()
+            self._buffer = remaining
+            self._state = StreamState.IN_CHAT
+            return True
+        self._md_code_panel.append(self._buffer)
+        self._buffer = ""
+        self._md_code_panel.update()
         return False
 
     def process_token(self, token: str) -> None:
@@ -220,6 +253,9 @@ class StreamingHandler(BaseCallbackHandler):
         elif self._state == StreamState.IN_XML and self._xml_panel.is_active:
             self._xml_panel.append(self._buffer)
             self._xml_panel.finish()
+        elif self._state == StreamState.IN_CODE_BLOCK and self._md_code_panel.is_active:
+            self._md_code_panel.append(self._buffer)
+            self._md_code_panel.finish()
         self._buffer = ""
         self._write("\n")
 
@@ -236,6 +272,7 @@ class StreamingHandler(BaseCallbackHandler):
         self.stop_spinner()
         self._code_panel.cleanup()
         self._xml_panel.cleanup()
+        self._md_code_panel.cleanup()
 
     def on_llm_new_token(self, token: str, **_kwargs) -> None:
         """Called by LangChain when a new token is generated."""

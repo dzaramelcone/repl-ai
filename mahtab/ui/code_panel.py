@@ -18,32 +18,35 @@ class CodePanel:
         self._update_interval = update_interval
         self._live: Live | None = None
         self._buffer = ""
+        self._language = "python"
         self._last_update_time: float = 0.0
 
     def _make_panel(self, code: str, done: bool) -> Panel:
         """Create a code panel for display."""
         syntax = Syntax(
             code or " ",
-            "python",
+            self._language,
             theme="monokai",
             line_numbers=True,
             indent_guides=True,
         )
+        title = self._language if self._language != "python" else "Code"
         if done:
             return Panel(
                 syntax,
-                title="[bold cyan]Code[/]",
+                title=f"[bold cyan]{title}[/]",
                 border_style="cyan",
             )
         return Panel(
             syntax,
-            title="[dim cyan]Writing...[/]",
+            title=f"[dim cyan]{title}...[/]",
             border_style="dim",
         )
 
-    def start(self) -> None:
+    def start(self, language: str = "python") -> None:
         """Start the live code panel."""
         self._buffer = ""
+        self._language = language
         self._live = Live(
             self._make_panel("", done=False),
             console=self.console,
