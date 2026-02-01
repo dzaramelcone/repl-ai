@@ -130,10 +130,22 @@ class MahtabApp(App):
     .chat-loading {
         height: 3;
     }
+
+    .mode-label {
+        height: 1;
+        background: $primary;
+        color: $text;
+        text-style: bold;
+        padding: 0 1;
+    }
+
+    .mode-label.repl-mode {
+        background: $success;
+    }
     """
 
     BINDINGS = [
-        ("shift+tab", "toggle_mode", "Toggle Chat/REPL"),
+        ("ctrl+tab", "toggle_mode", "Toggle Chat/REPL"),
         ("f7", "new_session", "New Tab"),
         ("f8", "close_session", "Close Tab"),
         ("f9", "prev_tab", "Prev Tab"),
@@ -160,6 +172,7 @@ class MahtabApp(App):
                         VerticalScroll(id=f"chat-{session.id}", classes="chat-pane"),
                         RichLog(id=f"repl-{session.id}", classes="repl-pane", wrap=True, markup=True),
                     ),
+                    Static("[CHAT] Ctrl+Tab to switch", id=f"mode-{session.id}", classes="mode-label"),
                     InputArea(id=f"input-{session.id}", classes="input-area", language="python"),
                     classes="session-content",
                 )
@@ -208,6 +221,7 @@ class MahtabApp(App):
                 VerticalScroll(id=f"chat-{session.id}", classes="chat-pane"),
                 RichLog(id=f"repl-{session.id}", classes="repl-pane", wrap=True, markup=True),
             ),
+            Static("[CHAT] Ctrl+Tab to switch", id=f"mode-{session.id}", classes="mode-label"),
             InputArea(id=f"input-{session.id}", classes="input-area", language="python"),
             classes="session-content",
         )
@@ -253,10 +267,15 @@ class MahtabApp(App):
         current = self.modes.get(session.id, "chat")
         new_mode = "repl" if current == "chat" else "chat"
         self.modes[session.id] = new_mode
-        # Update input border to indicate mode
-        input_widget = self.query_one(f"#input-{session.id}", InputArea)
-        input_widget.styles.border = ("solid", "green" if new_mode == "repl" else "magenta")
-        self.notify(f"Mode: {new_mode.upper()}", timeout=1)
+
+        # Update mode label
+        mode_label = self.query_one(f"#mode-{session.id}", Static)
+        if new_mode == "repl":
+            mode_label.update("[REPL] Ctrl+Tab to switch")
+            mode_label.add_class("repl-mode")
+        else:
+            mode_label.update("[CHAT] Ctrl+Tab to switch")
+            mode_label.remove_class("repl-mode")
 
     def _get_active_session(self) -> Session | None:
         """Get the currently active session."""
