@@ -26,6 +26,16 @@ _history = []
 _repl_activity = []
 _original_displayhook = None
 
+# Usage tracking (session stats)
+_usage_stats = {
+    "total_cost_usd": 0.0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation_input_tokens": 0,
+    "num_calls": 0,
+}
+
 # Skills directory
 SKILLS_DIR = Path("~/.mahtab/skills").expanduser()
 LAST_SESSION_FILE = Path("~/.mahtab/last_session.json").expanduser()
@@ -495,6 +505,15 @@ async def _call_claude_stream(system: str, messages: list) -> str:
 
                 # Handle final result
                 elif data.get("type") == "result":
+                    # Track usage stats
+                    _usage_stats["num_calls"] += 1
+                    _usage_stats["total_cost_usd"] += data.get("total_cost_usd", 0)
+                    usage_data = data.get("usage", {})
+                    _usage_stats["input_tokens"] += usage_data.get("input_tokens", 0)
+                    _usage_stats["output_tokens"] += usage_data.get("output_tokens", 0)
+                    _usage_stats["cache_read_input_tokens"] += usage_data.get("cache_read_input_tokens", 0)
+                    _usage_stats["cache_creation_input_tokens"] += usage_data.get("cache_creation_input_tokens", 0)
+
                     if not full_response:
                         full_response = data.get("result", "")
 
@@ -555,11 +574,6 @@ def edit(file_path: str, old: str, new: str) -> str:
     import importlib
 
     path = Path(file_path).expanduser().resolve()
-
-    # Don't allow editing ourselves
-    self_path = Path(__file__).resolve()
-    if path == self_path:
-        return f"Error: cannot edit {path} while it's running"
 
     if not path.exists():
         return f"Error: {path} does not exist"
@@ -824,6 +838,25 @@ def tasks():
             console.print(f"  [yellow]#{i}: running...[/]")
         else:
             console.print(f"  [dim]#{i}: pending[/]")
+
+
+def usage():
+    """Show cumulative usage stats for this session."""
+    s = _usage_stats
+    console.print(Panel(
+        f"""[bold]Session Usage Stats[/]
+
+Calls:          {s['num_calls']}
+Total Cost:     ${s['total_cost_usd']:.4f}
+
+[dim]Tokens:[/]
+  Input:        {s['input_tokens']:,}
+  Output:       {s['output_tokens']:,}
+  Cache Read:   {s['cache_read_input_tokens']:,}
+  Cache Create: {s['cache_creation_input_tokens']:,}""",
+        title="[cyan]usage()[/]",
+        border_style="dim"
+    ))
 
 
 # Convenience: auto-init if imported interactively
