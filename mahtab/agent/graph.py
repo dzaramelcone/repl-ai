@@ -84,7 +84,7 @@ def execute_node(state: AgentState) -> dict:
         results.append((output, is_error))
 
         if on_execution:
-            on_execution(output, is_error)
+            on_execution(block, output, is_error)
 
     return {"execution_results": results}
 

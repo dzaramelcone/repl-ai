@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import re
 
+from rich.panel import Panel
+from rich.syntax import Syntax
 from textual.app import App
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import (
@@ -28,6 +30,12 @@ from mahtab.ui.handlers import StoreHandler
 def strip_code_blocks(text: str) -> str:
     """Remove fenced code blocks from markdown text."""
     return re.sub(r"```[\w]*\n.*?```", "", text, flags=re.DOTALL).strip()
+
+
+def make_code_panel(code: str, title: str, border_style: str = "blue") -> Panel:
+    """Create a Rich Panel with syntax-highlighted Python code."""
+    syntax = Syntax(code, "python", theme="monokai", line_numbers=False)
+    return Panel(syntax, title=title, border_style=border_style, expand=False)
 
 
 class RichLogHandler(logging.Handler):
@@ -223,8 +231,12 @@ class MahtabApp(App):
             return
         input_widget.clear()
 
-        # Log the input and execute
-        session.log_user_repl.info(f">>> {code}")
+        repl_pane = self.query_one(f"#repl-{session.id}", RichLog)
+
+        # Show code in a panel
+        repl_pane.write(make_code_panel(code, "You", "green"))
+
+        # Execute and let interpreter log output via handlers
         session.interpreter.run(code)
 
     async def _submit_to_chat(self, session: Session):
@@ -251,13 +263,15 @@ class MahtabApp(App):
             self.agents[session.id] = REPLAgent(session=session)
 
         agent = self.agents[session.id]
+        repl_pane = self.query_one(f"#repl-{session.id}", RichLog)
 
         # Callback to log code execution to REPL pane
-        def on_execution(output: str, is_error: bool):
+        def on_execution(code: str, output: str, is_error: bool):
+            repl_pane.write(make_code_panel(code, "Claude", "cyan"))
             if is_error:
-                session.log_llm_repl.error(f"[red]{output}[/red]")
-            else:
-                session.log_llm_repl.info(output)
+                repl_pane.write(f"[red]{output}[/red]")
+            elif output and output != "(no output)":
+                repl_pane.write(output)
 
         try:
             response = await agent.ask(prompt, streaming_handler=None, on_execution=on_execution)

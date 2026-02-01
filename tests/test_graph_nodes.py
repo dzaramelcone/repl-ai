@@ -190,8 +190,8 @@ def test_execute_node_calls_on_execution_callback():
     session = make_session()
     callback_calls = []
 
-    def on_execution(output, is_error):
-        callback_calls.append((output, is_error))
+    def on_execution(code, output, is_error):
+        callback_calls.append((code, output, is_error))
 
     state: AgentState = {
         "code_blocks": ["x = 42", "print(x)"],
@@ -204,8 +204,9 @@ def test_execute_node_calls_on_execution_callback():
     # Callback should have been called twice (once per block)
     assert len(callback_calls) == 2
     # Second block prints x, so output should be "42\n"
-    assert callback_calls[1][0] == "42\n"
-    assert callback_calls[1][1] is False
+    assert callback_calls[1][0] == "print(x)"  # code
+    assert callback_calls[1][1] == "42\n"  # output
+    assert callback_calls[1][2] is False  # is_error
 
 
 def test_execute_node_callback_receives_errors():
@@ -215,8 +216,8 @@ def test_execute_node_callback_receives_errors():
     session = make_session()
     callback_calls = []
 
-    def on_execution(output, is_error):
-        callback_calls.append((output, is_error))
+    def on_execution(code, output, is_error):
+        callback_calls.append((code, output, is_error))
 
     state: AgentState = {
         "code_blocks": ["1/0"],
@@ -227,8 +228,9 @@ def test_execute_node_callback_receives_errors():
     execute_node(state)
 
     assert len(callback_calls) == 1
-    assert "division by zero" in callback_calls[0][0].lower()
-    assert callback_calls[0][1] is True
+    assert callback_calls[0][0] == "1/0"  # code
+    assert "division by zero" in callback_calls[0][1].lower()  # output
+    assert callback_calls[0][2] is True  # is_error
 
 
 def test_execute_node_works_without_callback():
