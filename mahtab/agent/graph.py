@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import TYPE_CHECKING, TypedDict
 
@@ -80,3 +81,65 @@ def execute_node(state: AgentState) -> dict:
         results.append((output, is_error))
 
     return {"execution_results": results}
+
+
+def _parse_reflection_response(response: str) -> ReflectionResult:
+    """Parse LLM response into ReflectionResult.
+
+    Args:
+        response: Raw LLM response (should be JSON).
+
+    Returns:
+        ReflectionResult, defaulting to incomplete on parse failure.
+    """
+    try:
+        # Try to extract JSON from response (may have surrounding text)
+        # Look for JSON object pattern
+        json_match = re.search(r'\{[^{}]*"is_complete"[^{}]*\}', response)
+        if json_match:
+            data = json.loads(json_match.group())
+        else:
+            data = json.loads(response)
+
+        return ReflectionResult(
+            is_complete=data.get("is_complete", False),
+            reasoning=data.get("reasoning", ""),
+            next_action=data.get("next_action"),
+        )
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return ReflectionResult(
+            is_complete=False,
+            reasoning="Failed to parse reflection response",
+            next_action="Retry with clearer output",
+        )
+
+
+async def reflect_node(state: AgentState, llm) -> dict:
+    """Evaluate whether execution satisfied the original request.
+
+    Args:
+        state: Current agent state.
+        llm: Language model for reflection call.
+
+    Returns:
+        Dict with reflection result to merge into state.
+    """
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    from mahtab.llm.prompts import build_reflection_prompt
+
+    prompt = build_reflection_prompt(
+        original_prompt=state["original_prompt"],
+        code_blocks=state.get("code_blocks", []),
+        execution_results=state.get("execution_results", []),
+    )
+
+    messages = [
+        SystemMessage(content="You evaluate code execution results. Respond only with JSON."),
+        HumanMessage(content=prompt),
+    ]
+
+    response = await llm.ainvoke(messages)
+    result = _parse_reflection_response(response.content)
+
+    return {"reflection": result}

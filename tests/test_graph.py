@@ -111,3 +111,31 @@ def test_execute_node_updates_namespace():
     execute_node(state)
     # exec(code, globals, locals) puts assignments in locals_ns
     assert session.locals_ns.get("my_var") == "hello"
+
+
+def test_reflect_node_parses_complete():
+    from mahtab.agent.graph import _parse_reflection_response
+
+    response = '{"is_complete": true, "reasoning": "Task done", "next_action": null}'
+    result = _parse_reflection_response(response)
+    assert result.is_complete is True
+    assert result.reasoning == "Task done"
+
+
+def test_reflect_node_parses_incomplete():
+    from mahtab.agent.graph import _parse_reflection_response
+
+    response = '{"is_complete": false, "reasoning": "Need more", "next_action": "Add validation"}'
+    result = _parse_reflection_response(response)
+    assert result.is_complete is False
+    assert result.next_action == "Add validation"
+
+
+def test_reflect_node_handles_malformed_json():
+    from mahtab.agent.graph import _parse_reflection_response
+
+    response = "This is not JSON at all"
+    result = _parse_reflection_response(response)
+    # Should default to incomplete on parse failure
+    assert result.is_complete is False
+    assert "parse" in result.reasoning.lower() or "invalid" in result.reasoning.lower()
