@@ -196,7 +196,7 @@ Other:
 
 When you want to run code, output a fenced python block. The code will execute in the user's namespace and you'll see the output. You can run multiple code blocks in one response.
 
-{f"Recent REPL activity:{chr(10)}{repl_context}" if repl_context else ""}
+{f"<repl_activity>{chr(10)}{repl_context}{chr(10)}</repl_activity>" if repl_context else ""}
 
 When you're done and have a final answer, just respond with text (no code block).
 
