@@ -135,6 +135,15 @@ class REPLAgent(BaseModel):
         """Clear conversation history."""
         self.session.clear_history()
 
+    def set_model(self, model: str) -> None:
+        """Switch to a different model.
+
+        Args:
+            model: Full model ID (e.g. 'claude-opus-4-20250514').
+        """
+        self.llm = ChatClaudeCLI(model=model)
+        self._graph = build_agent_graph(llm=self.llm, max_turns=self.max_turns)
+
 
 def create_repl_agent(
     session: SessionState,

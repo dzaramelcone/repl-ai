@@ -381,6 +381,19 @@ def run_repl(ns: dict) -> None:
             print(f"\n── record {i} ──")
             print(record)
 
+    def model(name: str) -> None:
+        """Switch Claude model. Usage: model("sonnet") or model("opus") or model("haiku")."""
+        models = {
+            "sonnet": "claude-sonnet-4-20250514",
+            "opus": "claude-opus-4-20250514",
+            "haiku": "claude-haiku-4-5-20251001",
+        }
+        if name not in models:
+            print(f"Unknown model: {name}. Choose: {', '.join(models.keys())}")
+            return
+        agent.set_model(models[name])
+        console.print(f"[dim]Switched to {name}[/]")
+
     # Add functions to namespace
     ns.update(
         {
@@ -393,6 +406,7 @@ def run_repl(ns: dict) -> None:
             "create": create,
             "skill": skill,
             "records": records,
+            "model": model,
             "peek": peek_raw,
             "grep": grep_raw,
             "partition": partition_raw,
