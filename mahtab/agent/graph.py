@@ -251,15 +251,9 @@ def build_agent_graph(llm, max_turns: int = 5):
     graph = StateGraph(AgentState)
 
     # Add nodes - wrap async nodes with llm dependency
-    async def _generate(state, config=None):
-        callbacks = None
-        if config:
-            cb = config.get("callbacks")
-            # LangGraph wraps callbacks in AsyncCallbackManager - extract handlers
-            if hasattr(cb, "handlers"):
-                callbacks = cb.handlers
-            elif cb:
-                callbacks = cb
+    async def _generate(state, config):
+        # LangGraph wraps callbacks in AsyncCallbackManager
+        callbacks = config["callbacks"].handlers
         return await generate_node(state, llm, callbacks=callbacks)
 
     async def _reflect(state):
