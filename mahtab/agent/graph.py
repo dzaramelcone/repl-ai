@@ -58,9 +58,12 @@ def extract_code_node(state: AgentState) -> dict:
     Returns:
         Dict with code_blocks list to merge into state.
     """
+    from mahtab.io.parser import parse_response
+
     response = state["current_response"]
-    blocks = re.findall(r"```python\n(.*?)```", response, re.DOTALL)
-    return {"code_blocks": [b.strip() for b in blocks]}
+    parsed = parse_response(response)
+    blocks = [content.strip() for tag, content in parsed if tag == "assistant-repl-in"]
+    return {"code_blocks": blocks}
 
 
 def execute_node(state: AgentState) -> dict:
