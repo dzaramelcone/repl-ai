@@ -77,7 +77,7 @@ def rlm(
     output_size = 0
     OUTPUT_LIMIT = 10000
 
-    def capture_print(*args: Any, **kwargs: Any) -> None:
+    def capture_print(*args: Any, **_: Any) -> None:
         nonlocal output_size
         text = " ".join(str(a) for a in args)
         output_size += len(text)

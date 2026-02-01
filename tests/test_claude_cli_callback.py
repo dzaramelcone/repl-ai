@@ -16,7 +16,7 @@ async def test_agenerate_emits_tokens_to_run_manager():
     run_manager = AsyncMock()
     tokens_received = []
 
-    async def capture_token(token, **kwargs):
+    async def capture_token(token, **_):
         tokens_received.append(token)
 
     run_manager.on_llm_new_token = capture_token
