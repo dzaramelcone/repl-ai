@@ -92,7 +92,7 @@ def test_execute_node_updates_namespace():
 def test_reflect_node_parses_complete():
     from mahtab.agent.graph import _parse_reflection_response
 
-    response = '{"is_complete": true, "reasoning": "Task done", "next_action": null}'
+    response = "<reflection><is_complete>true</is_complete><reasoning>Task done</reasoning><next_action></next_action></reflection>"
     result = _parse_reflection_response(response)
     assert result.is_complete is True
     assert result.reasoning == "Task done"
@@ -101,20 +101,20 @@ def test_reflect_node_parses_complete():
 def test_reflect_node_parses_incomplete():
     from mahtab.agent.graph import _parse_reflection_response
 
-    response = '{"is_complete": false, "reasoning": "Need more", "next_action": "Add validation"}'
+    response = "<reflection><is_complete>false</is_complete><reasoning>Need more</reasoning><next_action>Add validation</next_action></reflection>"
     result = _parse_reflection_response(response)
     assert result.is_complete is False
     assert result.next_action == "Add validation"
 
 
-def test_reflect_node_crashes_on_malformed_json():
-    """Malformed JSON should crash - fail fast, no defensive handling."""
-    import json
+def test_reflect_node_crashes_on_malformed_xml():
+    """Malformed XML should crash - fail fast, no defensive handling."""
+    from xml.etree.ElementTree import ParseError
 
     from mahtab.agent.graph import _parse_reflection_response
 
-    response = "This is not JSON at all"
-    with pytest.raises(json.JSONDecodeError):
+    response = "This is not XML at all"
+    with pytest.raises(ParseError):
         _parse_reflection_response(response)
 
 

@@ -2,23 +2,22 @@
 
 from __future__ import annotations
 
-import json
 import re
 from collections.abc import Callable
 from typing import TypedDict
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from pydantic import BaseModel
+from pydantic_xml import BaseXmlModel, element
 
 from mahtab.core.state import SessionState
 
 
-class ReflectionResult(BaseModel):
+class ReflectionResult(BaseXmlModel, tag="reflection"):
     """Result of the reflection node's evaluation."""
 
-    is_complete: bool
-    reasoning: str
-    next_action: str = ""
+    is_complete: bool = element()
+    reasoning: str = element()
+    next_action: str = element(default="")
 
 
 class AgentState(TypedDict, total=False):
@@ -127,24 +126,15 @@ def _parse_reflection_response(response: str) -> ReflectionResult:
     """Parse LLM response into ReflectionResult.
 
     Args:
-        response: Raw LLM response (should be JSON).
+        response: Raw LLM response (should be XML).
 
     Returns:
-        ReflectionResult parsed from JSON.
+        ReflectionResult parsed from XML.
     """
-    # Try to extract JSON from response (may have surrounding text)
-    # Look for JSON object pattern
-    json_match = re.search(r'\{[^{}]*"is_complete"[^{}]*\}', response)
-    if json_match:
-        data = json.loads(json_match.group())
-    else:
-        data = json.loads(response)
-
-    return ReflectionResult(
-        is_complete=data["is_complete"],
-        reasoning=data["reasoning"],
-        next_action=data.get("next_action") or "",
-    )
+    # Extract <reflection>...</reflection> block from response
+    xml_match = re.search(r"<reflection>.*?</reflection>", response, re.DOTALL)
+    xml_str = xml_match.group() if xml_match else response
+    return ReflectionResult.from_xml(xml_str)
 
 
 async def generate_node(state: AgentState, llm, callbacks) -> dict:
@@ -195,7 +185,7 @@ async def reflect_node(state: AgentState, llm) -> dict:
     )
 
     messages = [
-        SystemMessage(content="You evaluate code execution results. Respond only with JSON."),
+        SystemMessage(content="You evaluate code execution results. Respond only with XML."),
         HumanMessage(content=prompt),
     ]
 

@@ -48,7 +48,7 @@ async def test_graph_code_then_complete():
     llm = MockLLM(
         [
             "<assistant-chat>Here's the code:</assistant-chat><assistant-repl-in>x = 42\nprint(x)</assistant-repl-in>",
-            '{"is_complete": true, "reasoning": "Variable set and printed", "next_action": null}',
+            "<reflection><is_complete>true</is_complete><reasoning>Variable set and printed</reasoning><next_action></next_action></reflection>",
         ]
     )
     graph = build_agent_graph(llm=llm, max_turns=5)
@@ -76,9 +76,9 @@ async def test_graph_multi_turn():
     llm = MockLLM(
         [
             "<assistant-chat>First:</assistant-chat><assistant-repl-in>x = 1</assistant-repl-in>",
-            '{"is_complete": false, "reasoning": "Need to also print", "next_action": "Print x"}',
+            "<reflection><is_complete>false</is_complete><reasoning>Need to also print</reasoning><next_action>Print x</next_action></reflection>",
             "<assistant-chat>Now print:</assistant-chat><assistant-repl-in>print(x)</assistant-repl-in>",
-            '{"is_complete": true, "reasoning": "Done", "next_action": null}',
+            "<reflection><is_complete>true</is_complete><reasoning>Done</reasoning><next_action></next_action></reflection>",
         ]
     )
     graph = build_agent_graph(llm=llm, max_turns=5)
@@ -107,7 +107,7 @@ async def test_graph_max_turns_limit():
     llm = MockLLM(
         [
             "<assistant-repl-in>x = 1</assistant-repl-in>",
-            '{"is_complete": false, "reasoning": "Never done", "next_action": "Keep going"}',
+            "<reflection><is_complete>false</is_complete><reasoning>Never done</reasoning><next_action>Keep going</next_action></reflection>",
         ]
     )
     graph = build_agent_graph(llm=llm, max_turns=2)

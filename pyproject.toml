@@ -8,6 +8,7 @@ dependencies = [
     "langchain>=0.3.0",
     "langgraph>=0.2.0",
     "pydantic>=2.0.0",
+    "pydantic-xml>=2.14.0",
     "rich>=13.0.0",
 ]
 

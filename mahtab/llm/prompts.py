@@ -170,8 +170,12 @@ Evaluate:
 1. CORRECTNESS: Did the code run without errors? If there were errors, are they blocking the task?
 2. COMPLETENESS: Does the output satisfy what the user asked for?
 
-Respond with ONLY valid JSON (no markdown, no explanation):
-{{"is_complete": true/false, "reasoning": "brief explanation", "next_action": "what to do next" or null}}"""
+Respond with ONLY this XML (no markdown, no explanation):
+<reflection>
+  <is_complete>true or false</is_complete>
+  <reasoning>brief explanation</reasoning>
+  <next_action>what to do next, or empty if complete</next_action>
+</reflection>"""
 
 
 def build_reflection_prompt(
