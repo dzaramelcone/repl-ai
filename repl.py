@@ -271,8 +271,10 @@ Other:
   load_claude_sessions() -> str    # Load ~/.claude/projects/*.jsonl
 
 Code execution:
-  ```python eval   → runs code, you SEE the output (use when you need the result)
-  ```python        → runs code, you DON'T see output (use for final code to show user)
+  ```python        → DEFAULT. Runs code, user sees output, you're DONE.
+  ```python eval   → RARE. Only if you MUST see output to continue (e.g. reading unknown data).
+
+IMPORTANT: Prefer ```python (no eval). Only use eval when you literally cannot proceed without seeing the result. If you're writing code the user asked for, use plain ```python.
 
 {f"<repl_activity>{chr(10)}{repl_context}{chr(10)}</repl_activity>" if repl_context else ""}
 
