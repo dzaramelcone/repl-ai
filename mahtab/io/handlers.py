@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import logging
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
-from mahtab.io.formatters import BytesFormatter, XMLFormatter
+from mahtab.io.formatters import BytesFormatter, RichFormatter, XMLFormatter
+from mahtab.ui.streaming import StreamingHandler
+
+if TYPE_CHECKING:
+    from rich.console import Console
 
 
 class Store(Protocol):
@@ -42,3 +46,20 @@ class StoreHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         self.store.append(self.format(record))
+
+
+class DisplayHandler(logging.Handler):
+    """Routes messages to terminal display."""
+
+    def __init__(self, console: Console) -> None:
+        super().__init__()
+        self.console = console
+        self.setFormatter(RichFormatter())
+        self.streamer = StreamingHandler(console)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        match record.tag:
+            case "assistant-chat-stream":
+                self.streamer.process_token(record.getMessage())
+            case _:
+                self.console.print(self.format(record))

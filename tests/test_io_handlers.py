@@ -1,8 +1,12 @@
 """Tests for logging handlers."""
 
 import logging
+from io import StringIO
+from unittest.mock import MagicMock
 
-from mahtab.io.handlers import PromptHandler, StoreHandler
+from rich.console import Console
+
+from mahtab.io.handlers import DisplayHandler, PromptHandler, StoreHandler
 
 
 def test_prompt_handler_accumulates_xml():
@@ -59,3 +63,33 @@ def test_store_handler_appends_bytes():
     handler.emit(record)
 
     assert store.data == b"<user-chat>hello</user-chat>"
+
+
+def test_display_handler_prints_formatted():
+    output = StringIO()
+    console = Console(file=output, force_terminal=True)
+    handler = DisplayHandler(console)
+
+    record = logging.LogRecord(
+        name="test", level=logging.INFO, pathname="", lineno=0, msg="hello", args=(), exc_info=None
+    )
+    record.tag = "user-chat"
+    handler.emit(record)
+
+    result = output.getvalue()
+    assert "You:" in result
+    assert "hello" in result
+
+
+def test_display_handler_streams_tokens():
+    console = MagicMock(spec=Console)
+    handler = DisplayHandler(console)
+    handler.streamer = MagicMock()
+
+    record = logging.LogRecord(
+        name="test", level=logging.INFO, pathname="", lineno=0, msg="tok", args=(), exc_info=None
+    )
+    record.tag = "assistant-chat-stream"
+    handler.emit(record)
+
+    handler.streamer.process_token.assert_called_once_with("tok")
