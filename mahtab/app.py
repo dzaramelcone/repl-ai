@@ -182,12 +182,12 @@ class MahtabApp(App):
         if not session:
             return
 
-        if event.key == "cmd+shift+enter":
-            # Cmd+Shift+Enter -> execute as Python in REPL
+        if event.key == "ctrl+shift+enter":
+            # Ctrl+Shift+Enter -> execute as Python in REPL
             await self._submit_to_repl(session)
             event.prevent_default()
-        elif event.key == "cmd+enter":
-            # Cmd+Enter -> send to chat (ask Claude)
+        elif event.key == "ctrl+enter":
+            # Ctrl+Enter -> send to chat (ask Claude)
             await self._submit_to_chat(session)
             event.prevent_default()
 
