@@ -745,13 +745,18 @@ def ed(content: str = "", path: str | None = None, suffix: str = ".py") -> str:
         subprocess.call([editor, str(file_path)])
         return file_path.read_text()
 
+    msg = "# --- YOUR MESSAGE ABOVE (everything below this line is ignored) ---"
+    header_lines = ["", ""]
+    header_lines.append(msg)
     # Build header with help and context
-    header_lines = [
-        "# ╭─────────────────────────────────────────────────────────────╮",
-        "# │  VIM: i=insert  Esc=normal  :wq=save+quit  :q!=quit no save │",
-        "# │  Delete these comments. Only text below --- is returned.   │",
-        "# ╰─────────────────────────────────────────────────────────────╯",
-    ]
+    header_lines.extend(
+        [
+            "# ╭─────────────────────────────────────────────────────────────╮",
+            "# │  VIM: i=insert  Esc=normal  :wq=save+quit  :q!=quit no save │",
+            "# │  Delete these comments. Only text below --- is returned.   │",
+            "# ╰─────────────────────────────────────────────────────────────╯",
+        ]
+    )
 
     # Add last assistant message as context
     if _history:
@@ -767,10 +772,6 @@ def ed(content: str = "", path: str | None = None, suffix: str = ".py") -> str:
                 for line in preview.split("\n"):
                     header_lines.append(f"#   {line}")
                 break
-
-    header_lines.append("#")
-    header_lines.append("# --- YOUR MESSAGE BELOW (everything above this line is ignored) ---")
-    header_lines.append("")
 
     header = "\n".join(header_lines)
     full_content = header + content
@@ -788,16 +789,10 @@ def ed(content: str = "", path: str | None = None, suffix: str = ".py") -> str:
         os.unlink(temp_path)
 
     # Strip header - find the marker line and return everything after
-    marker = "# --- YOUR MESSAGE BELOW"
+    marker = msg
     if marker in result:
-        _, _, after = result.partition(marker)
+        result, _, _ = result.partition(marker)
         # Skip the rest of the marker line and the blank line after
-        lines = after.split("\n", 2)
-        if len(lines) >= 2:
-            result = lines[2] if len(lines) > 2 else ""
-        else:
-            result = ""
-
     return result.strip()
 
 
