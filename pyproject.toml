@@ -1,13 +1,18 @@
 [project]
-name = "rlm"
-version = "0.1.0"
+name = "mahtab"
+version = "0.2.0"
+description = "AI-powered shared Python REPL with Claude integration"
 requires-python = ">=3.11"
 dependencies = [
-    "anthropic",
-    "langchain>=1.2.7",
-    "langgraph>=1.0.7",
-    "rich",
+    "langchain-core>=0.3.0",
+    "langchain>=0.3.0",
+    "langgraph>=0.2.0",
+    "pydantic>=2.0.0",
+    "rich>=13.0.0",
 ]
+
+[project.scripts]
+mahtab = "mahtab.repl.interactive:run_repl"
 
 [dependency-groups]
 dev = ["ruff", "pre-commit"]
@@ -32,4 +37,4 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["rlm"]
+known-first-party = ["mahtab"]

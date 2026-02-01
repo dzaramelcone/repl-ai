@@ -1,2 +1,2 @@
 #!/bin/bash
-exec uv run python -i -m repl
+exec uv run python -i -m mahtab
