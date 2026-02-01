@@ -4,7 +4,12 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from mahtab.agent.graph import AgentState, build_agent_graph
-from mahtab.core.state import SessionState
+from mahtab.session import Session
+from mahtab.store import Store
+
+
+def make_session():
+    return Session(store=Store())
 
 
 class MockLLM:
@@ -14,7 +19,7 @@ class MockLLM:
         self.responses = responses
         self.call_count = 0
 
-    async def ainvoke(self, messages, config=None):
+    async def ainvoke(self, messages, _config=None):
         response = self.responses[self.call_count % len(self.responses)]
         self.call_count += 1
         return AIMessage(content=response)
@@ -31,7 +36,7 @@ async def test_graph_text_only_response():
         "system_prompt": "You are helpful.",
         "original_prompt": "hello",
         "turn_count": 0,
-        "session": SessionState(),
+        "session": make_session(),
     }
 
     result = await graph.ainvoke(initial_state)
@@ -52,7 +57,7 @@ async def test_graph_code_then_complete():
     )
     graph = build_agent_graph(llm=llm, max_turns=5)
 
-    session = SessionState()
+    session = make_session()
     initial_state: AgentState = {
         "messages": [HumanMessage(content="set x to 42 and print it")],
         "system_prompt": "You are helpful.",
@@ -64,7 +69,7 @@ async def test_graph_code_then_complete():
     result = await graph.ainvoke(initial_state)
 
     assert result["reflection"].is_complete is True
-    assert session.globals_ns.get("x") == 42 or session.locals_ns.get("x") == 42
+    assert session.namespace.get("x") == 42
     assert result["turn_count"] == 1
 
 
@@ -81,7 +86,7 @@ async def test_graph_multi_turn():
     )
     graph = build_agent_graph(llm=llm, max_turns=5)
 
-    session = SessionState()
+    session = make_session()
     initial_state: AgentState = {
         "messages": [HumanMessage(content="set x and print it")],
         "system_prompt": "You are helpful.",
@@ -114,7 +119,7 @@ async def test_graph_max_turns_limit():
         "system_prompt": "You are helpful.",
         "original_prompt": "infinite task",
         "turn_count": 0,
-        "session": SessionState(),
+        "session": make_session(),
     }
 
     result = await graph.ainvoke(initial_state)

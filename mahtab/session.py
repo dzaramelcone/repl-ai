@@ -83,3 +83,26 @@ class Session:
     def spawn(self, context: dict | None = None) -> Session:
         """Create a child session with shared store."""
         return Session(store=self.store, parent=self, context=context)
+
+    def summarize_namespace(self, max_vars: int = 30) -> str:
+        """Summarize variables in the namespace for the system prompt."""
+        if not self.namespace:
+            return "(empty)"
+
+        lines = []
+        for name, val in list(self.namespace.items())[:max_vars]:
+            if name.startswith("_"):
+                continue
+            try:
+                typ = type(val).__name__
+                if isinstance(val, int | float | str | bool | type(None)):
+                    rep = repr(val)[:50]
+                elif isinstance(val, list | dict | set | tuple):
+                    rep = f"{typ} with {len(val)} items"
+                else:
+                    rep = typ
+                lines.append(f"  {name}: {rep}")
+            except Exception:
+                lines.append(f"  {name}: <unknown>")
+
+        return "\n".join(lines) or "(no user variables)"

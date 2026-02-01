@@ -4,14 +4,20 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from mahtab.agent.repl_agent import REPLAgent, create_repl_agent
-from mahtab.core.state import SessionState
+from mahtab.agent.repl_agent import REPLAgent
+from mahtab.session import Session
+from mahtab.store import Store
+
+
+def make_session():
+    """Create a session for testing."""
+    return Session(store=Store())
 
 
 @pytest.mark.asyncio
 async def test_repl_agent_ask_uses_graph():
     """Test that REPLAgent.ask() invokes the graph."""
-    session = SessionState()
+    session = make_session()
     agent = REPLAgent(session=session)
 
     # Mock the graph
@@ -33,7 +39,7 @@ async def test_repl_agent_ask_uses_graph():
 @pytest.mark.asyncio
 async def test_repl_agent_ask_updates_session_messages():
     """Test that ask() updates session messages from graph result."""
-    session = SessionState()
+    session = make_session()
     agent = REPLAgent(session=session)
 
     from langchain_core.messages import AIMessage, HumanMessage
@@ -59,7 +65,7 @@ async def test_repl_agent_ask_updates_session_messages():
 
 def test_repl_agent_has_graph_after_init():
     """Test that REPLAgent builds the graph on initialization."""
-    session = SessionState()
+    session = make_session()
     agent = REPLAgent(session=session)
 
     # Graph should be built
@@ -69,27 +75,13 @@ def test_repl_agent_has_graph_after_init():
     assert hasattr(agent._graph, "ainvoke")
 
 
-def test_create_repl_agent_defaults():
-    """Test create_repl_agent with default arguments."""
-    agent = create_repl_agent()
-
-    assert agent.session is not None
-    assert agent.max_turns == 5
-    assert agent._graph is not None
-
-
-def test_create_repl_agent_custom_max_turns():
-    """Test create_repl_agent with custom max_turns."""
-    agent = create_repl_agent(max_turns=10)
-
-    assert agent.max_turns == 10
-
-
 def test_repl_agent_clear_history():
-    """Test that clear_history delegates to session."""
-    session = SessionState()
-    session.add_user_message("hello")
-    session.add_assistant_message("hi")
+    """Test that clear_history clears session messages."""
+    session = make_session()
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    session.messages.append(HumanMessage(content="hello"))
+    session.messages.append(AIMessage(content="hi"))
 
     agent = REPLAgent(session=session)
     assert len(session.messages) == 2
@@ -98,31 +90,12 @@ def test_repl_agent_clear_history():
     assert len(session.messages) == 0
 
 
-def test_repl_agent_ask_sync():
-    """Test synchronous ask_sync wrapper."""
-    session = SessionState()
-    agent = REPLAgent(session=session)
-
-    mock_graph = AsyncMock()
-    mock_graph.ainvoke.return_value = {
-        "current_response": "Sync response!",
-        "code_blocks": [],
-        "turn_count": 1,
-        "messages": [],
-    }
-
-    with patch.object(agent, "_graph", mock_graph):
-        result = agent.ask_sync("sync test")
-
-    assert result == "Sync response!"
-
-
 @pytest.mark.asyncio
 async def test_ask_accepts_streaming_handler():
     """ask() should accept and pass streaming_handler as callback."""
-    from mahtab.ui.streaming import StreamingHandler
+    from mahtab.ui.handlers import SessionStreamingHandler
 
-    session = SessionState()
+    session = make_session()
     agent = REPLAgent(session=session)
 
     mock_graph = AsyncMock()
@@ -133,7 +106,7 @@ async def test_ask_accepts_streaming_handler():
         "messages": session.messages,
     }
 
-    handler = StreamingHandler()
+    handler = SessionStreamingHandler(session)
 
     with patch.object(agent, "_graph", mock_graph):
         await agent.ask("test prompt", streaming_handler=handler)
@@ -147,7 +120,7 @@ async def test_ask_accepts_streaming_handler():
 @pytest.mark.asyncio
 async def test_ask_passes_on_execution_callback():
     """ask() should pass on_execution callback in initial state."""
-    session = SessionState()
+    session = make_session()
     agent = REPLAgent(session=session)
 
     mock_graph = AsyncMock()

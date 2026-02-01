@@ -6,7 +6,7 @@ import sys
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from mahtab.core.state import SessionState
+    from mahtab.session import Session
 
 
 class LimitedOutput:
@@ -33,7 +33,7 @@ class LimitedOutput:
 
 def execute_code(
     code: str,
-    session: SessionState,
+    session: Session,
     output_limit: int = 10000,
 ) -> tuple[str, bool]:
     """Execute code in the session's namespace.
@@ -52,12 +52,12 @@ def execute_code(
     try:
         # Try eval first (expression)
         try:
-            result = eval(code, session.globals_ns, session.locals_ns)
+            result = eval(code, session.namespace)
             if result is not None:
                 print(repr(result))
         except SyntaxError:
             # Fall back to exec (statement)
-            exec(code, session.globals_ns, session.locals_ns)
+            exec(code, session.namespace)
 
         output = captured.getvalue()
         return output if output else "(no output)", False

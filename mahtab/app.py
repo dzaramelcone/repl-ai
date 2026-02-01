@@ -8,9 +8,10 @@ from textual.app import App
 from textual.containers import Horizontal, Vertical
 from textual.widgets import Footer, Header, RichLog, TabbedContent, TabPane, TextArea
 
+from mahtab.agent.repl_agent import REPLAgent
 from mahtab.session import Session
 from mahtab.store import Store
-from mahtab.ui.handlers import StoreHandler
+from mahtab.ui.handlers import SessionStreamingHandler, StoreHandler
 
 
 class RichLogHandler(logging.Handler):
@@ -71,6 +72,7 @@ class MahtabApp(App):
         super().__init__()
         self.store = Store()
         self.sessions: dict[str, Session] = {}
+        self.agents: dict[str, REPLAgent] = {}
 
     def compose(self):
         yield Header()
@@ -204,7 +206,7 @@ class MahtabApp(App):
         session.interpreter.run(code)
 
     async def _submit_to_chat(self, session: Session):
-        """Send input to chat (Claude). Not yet implemented."""
+        """Send input to chat (Claude)."""
         input_widget = self.query_one(f"#input-{session.id}", TextArea)
         prompt = input_widget.text.strip()
         if not prompt:
@@ -213,5 +215,22 @@ class MahtabApp(App):
 
         # Log the prompt
         session.log_user_chat.info(f"You: {prompt}")
-        # TODO: Wire up Claude agent here
-        session.log_llm_chat.info("[dim]Claude integration coming soon...[/dim]")
+
+        # Get or create agent for this session
+        if session.id not in self.agents:
+            self.agents[session.id] = REPLAgent(session=session)
+
+        agent = self.agents[session.id]
+        streaming_handler = SessionStreamingHandler(session)
+
+        # Callback to log code execution to REPL pane
+        def on_execution(output: str, is_error: bool):
+            if is_error:
+                session.log_llm_repl.error(f"[red]{output}[/red]")
+            else:
+                session.log_llm_repl.info(output)
+
+        try:
+            await agent.ask(prompt, streaming_handler=streaming_handler, on_execution=on_execution)
+        except Exception as e:
+            session.log_llm_chat.error(f"[red]Error: {e}[/red]")

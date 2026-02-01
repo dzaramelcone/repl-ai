@@ -5,6 +5,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from mahtab.agent.graph import AgentState
+from mahtab.session import Session
+from mahtab.store import Store
+
+
+def make_session():
+    return Session(store=Store())
 
 
 def test_extract_code_node_single_block():
@@ -42,9 +48,8 @@ def test_extract_code_node_no_blocks():
 
 def test_execute_node_success():
     from mahtab.agent.graph import execute_node
-    from mahtab.core.state import SessionState
 
-    session = SessionState()
+    session = make_session()
     state: AgentState = {
         "code_blocks": ["x = 42", "print(x)"],
         "execution_results": [],
@@ -58,9 +63,8 @@ def test_execute_node_success():
 
 def test_execute_node_error():
     from mahtab.agent.graph import execute_node
-    from mahtab.core.state import SessionState
 
-    session = SessionState()
+    session = make_session()
     state: AgentState = {
         "code_blocks": ["1/0"],
         "execution_results": [],
@@ -74,16 +78,15 @@ def test_execute_node_error():
 
 def test_execute_node_updates_namespace():
     from mahtab.agent.graph import execute_node
-    from mahtab.core.state import SessionState
 
-    session = SessionState()
+    session = make_session()
     state: AgentState = {
         "code_blocks": ["my_var = 'hello'"],
         "execution_results": [],
         "session": session,
     }
     execute_node(state)
-    assert session.locals_ns.get("my_var") == "hello"
+    assert session.namespace.get("my_var") == "hello"
 
 
 def test_reflect_node_parses_complete():
@@ -183,9 +186,8 @@ async def test_generate_node_passes_callbacks():
 def test_execute_node_calls_on_execution_callback():
     """execute_node should call on_execution callback for each code block."""
     from mahtab.agent.graph import execute_node
-    from mahtab.core.state import SessionState
 
-    session = SessionState()
+    session = make_session()
     callback_calls = []
 
     def on_execution(output, is_error):
@@ -209,9 +211,8 @@ def test_execute_node_calls_on_execution_callback():
 def test_execute_node_callback_receives_errors():
     """on_execution callback should receive is_error=True for failed code."""
     from mahtab.agent.graph import execute_node
-    from mahtab.core.state import SessionState
 
-    session = SessionState()
+    session = make_session()
     callback_calls = []
 
     def on_execution(output, is_error):
@@ -233,9 +234,8 @@ def test_execute_node_callback_receives_errors():
 def test_execute_node_works_without_callback():
     """execute_node should work fine when on_execution is None."""
     from mahtab.agent.graph import execute_node
-    from mahtab.core.state import SessionState
 
-    session = SessionState()
+    session = make_session()
     state: AgentState = {
         "code_blocks": ["x = 1"],
         "execution_results": [],

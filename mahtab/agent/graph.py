@@ -10,7 +10,7 @@ from typing import TypedDict
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel
 
-from mahtab.core.state import SessionState
+from mahtab.session import Session
 
 
 class ReflectionResult(BaseModel):
@@ -32,7 +32,7 @@ class AgentState(TypedDict, total=False):
         code_blocks: Extracted Python code blocks.
         execution_results: List of (output, is_error) tuples.
         turn_count: Number of generate cycles completed.
-        session: The SessionState for namespace and persistence.
+        session: The Session for namespace and execution.
         reflection: Result of the last reflection (if any).
         on_execution: Callback for execution output (output, is_error).
     """
@@ -44,7 +44,7 @@ class AgentState(TypedDict, total=False):
     code_blocks: list[str]
     execution_results: list[tuple[str, bool]]
     turn_count: int
-    session: SessionState
+    session: Session
     reflection: ReflectionResult | None
     on_execution: Callable[[str, bool], None] | None
 

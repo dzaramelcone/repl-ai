@@ -1,5 +1,5 @@
-"""Agent setup using LangChain create_agent."""
+"""Agent module with LangGraph-based REPL agent."""
 
-from mahtab.agent.repl_agent import REPLAgent, create_repl_agent
+from mahtab.agent.repl_agent import REPLAgent
 
-__all__ = ["REPLAgent", "create_repl_agent"]
+__all__ = ["REPLAgent"]

@@ -31,18 +31,18 @@ def test_session_shares_store():
     assert s1.store is s2.store
 
 
-def test_session_exec_updates_namespace():
+def test_session_interpreter_updates_namespace():
     store = Store()
     session = Session(store)
-    session.exec("x = 42")
+    session.interpreter.run("x = 42")
     assert session.namespace["x"] == 42
 
 
-def test_session_exec_can_read_namespace():
+def test_session_interpreter_can_read_namespace():
     store = Store()
     session = Session(store)
     session.namespace["y"] = 10
-    session.exec("z = y * 2")
+    session.interpreter.run("z = y * 2")
     assert session.namespace["z"] == 20
 
 
