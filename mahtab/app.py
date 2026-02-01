@@ -133,6 +133,7 @@ class MahtabApp(App):
     """
 
     BINDINGS = [
+        ("shift+tab", "toggle_mode", "Toggle Chat/REPL"),
         ("f7", "new_session", "New Tab"),
         ("f8", "close_session", "Close Tab"),
         ("f9", "prev_tab", "Prev Tab"),
@@ -144,12 +145,14 @@ class MahtabApp(App):
         self.store = Store()
         self.sessions: dict[str, Session] = {}
         self.agents: dict[str, REPLAgent] = {}
+        self.modes: dict[str, str] = {}  # session_id -> "chat" or "repl"
 
     def compose(self):
         yield Header()
         # Create initial session during compose
         session = Session(store=self.store)
         self.sessions[session.id] = session
+        self.modes[session.id] = "chat"  # Default to chat mode
         with TabbedContent(id="sessions"):
             with TabPane(f"Session {session.id}", id=f"tab-{session.id}"):
                 yield Vertical(
@@ -194,6 +197,7 @@ class MahtabApp(App):
     ) -> Session:
         session = Session(store=self.store, parent=parent, context=context)
         self.sessions[session.id] = session
+        self.modes[session.id] = "chat"  # Default to chat mode
 
         tabs = self.query_one("#sessions", TabbedContent)
         label = f"↳ {session.id}" if parent else f"Session {session.id}"
@@ -230,6 +234,7 @@ class MahtabApp(App):
                 session_id = active_tab_id[4:]
                 self.sessions.pop(session_id, None)
                 self.agents.pop(session_id, None)
+                self.modes.pop(session_id, None)
             tabs.remove_pane(active_tab_id)
 
     def action_next_tab(self):
@@ -239,6 +244,19 @@ class MahtabApp(App):
     def action_prev_tab(self):
         tabs = self.query_one("#sessions", TabbedContent)
         tabs.action_previous_tab()
+
+    def action_toggle_mode(self):
+        """Toggle between chat and REPL mode."""
+        session = self._get_active_session()
+        if not session:
+            return
+        current = self.modes.get(session.id, "chat")
+        new_mode = "repl" if current == "chat" else "chat"
+        self.modes[session.id] = new_mode
+        # Update input border to indicate mode
+        input_widget = self.query_one(f"#input-{session.id}", InputArea)
+        input_widget.styles.border = ("solid", "green" if new_mode == "repl" else "magenta")
+        self.notify(f"Mode: {new_mode.upper()}", timeout=1)
 
     def _get_active_session(self) -> Session | None:
         """Get the currently active session."""
@@ -250,14 +268,38 @@ class MahtabApp(App):
         return None
 
     async def on_input_area_submit(self, event: InputArea.Submit) -> None:
-        """Handle input submission."""
+        """Handle input submission based on current mode."""
         # Extract session id from input id (format: input-{session_id})
         if not event.input_id.startswith("input-"):
             return
         session_id = event.input_id[6:]
         session = self.sessions.get(session_id)
-        if session:
+        if not session:
+            return
+
+        mode = self.modes.get(session_id, "chat")
+        if mode == "repl":
+            self._submit_to_repl(session, event.text)
+        else:
             await self._submit_to_chat(session, event.text)
+
+    def _submit_to_repl(self, session: Session, text: str) -> None:
+        """Execute code in the REPL."""
+        code = text.strip()
+        if not code:
+            return
+
+        repl_pane = self.query_one(f"#repl-{session.id}", RichLog)
+
+        # Show code in a panel
+        repl_pane.write(make_code_panel(code, "You", "green"))
+
+        # Execute and show output in panel
+        stdout, errors = session.interpreter.run(code)
+        if errors:
+            repl_pane.write(make_output_panel(errors, "You", "green", is_error=True))
+        elif stdout:
+            repl_pane.write(make_output_panel(stdout, "You", "green"))
 
     async def _submit_to_chat(self, session: Session, text: str) -> None:
         """Send input to chat (Claude)."""
