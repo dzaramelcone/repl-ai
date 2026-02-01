@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from textual.containers import Horizontal
+from textual.containers import Horizontal, Vertical
 from textual.widget import Widget
 from textual.widgets import RichLog, TextArea
 
@@ -32,9 +32,11 @@ class REPLWidget(Widget):
 
     DEFAULT_CSS = """
     REPLWidget {
-        layout: grid;
-        grid-size: 1 2;
-        grid-rows: 1fr auto;
+        height: 100%;
+        width: 100%;
+    }
+
+    REPLWidget > Vertical {
         height: 100%;
         width: 100%;
     }
@@ -58,7 +60,7 @@ class REPLWidget(Widget):
 
     REPLWidget #input {
         height: 5;
-        width: 100%;
+        dock: bottom;
         border: solid $accent;
     }
     """
@@ -68,11 +70,13 @@ class REPLWidget(Widget):
         self.session = session
 
     def compose(self):
-        yield Horizontal(
-            RichLog(id="chat", wrap=True, markup=True),
-            RichLog(id="repl", wrap=True, markup=True),
+        yield Vertical(
+            Horizontal(
+                RichLog(id="chat", wrap=True, markup=True),
+                RichLog(id="repl", wrap=True, markup=True),
+            ),
+            TextArea(id="input", language="python"),
         )
-        yield TextArea(id="input", language="python")
 
     def on_mount(self):
         self.call_after_refresh(self._setup_handlers)
