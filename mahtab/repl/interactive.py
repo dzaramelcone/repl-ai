@@ -123,6 +123,9 @@ def run_repl(ns: dict | None = None) -> None:
         if not prompt:
             return
 
+        # Log user input
+        log.info(prompt, extra={"tag": "user-chat"})
+
         try:
             streaming_handler.reset()
 
