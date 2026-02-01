@@ -120,10 +120,10 @@ class DynamicPrompt:
 
         info = " ".join(parts)
         if self.input_mode == "chat":
-            symbol = f"{GREEN}◇{RESET}"
+            mode_indicator = f"{GREEN}◇ ai{RESET}"
         else:
-            symbol = f"{CYAN}◈{RESET}"
-        return f"{DIM}{info}{RESET} {symbol} " if info else f"{symbol} "
+            mode_indicator = f"{CYAN}◈ py{RESET}"
+        return f"{info} {mode_indicator} " if info else f"{mode_indicator} "
 
 
 class InteractiveREPL(code.InteractiveConsole):
