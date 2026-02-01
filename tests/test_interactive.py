@@ -67,43 +67,80 @@ class TestDynamicPromptInputMode:
 class TestInputLogging:
     """Tests for input logging to correct tags."""
 
-    def test_repl_mode_logs_to_user_repl_in(self):
-        """In REPL mode, history should log to user-repl-in."""
+    def test_repl_mode_logs_to_user_repl_in_exactly_once(self):
+        """In REPL mode, history should log to user-repl-in exactly once."""
         from unittest.mock import MagicMock, patch
 
         from mahtab.repl.interactive import DynamicPrompt
 
         session = SessionState()
-        ns = {}
         log = MagicMock()
-        prompt = DynamicPrompt(session, ns, log)
+        prompt = DynamicPrompt(session, {}, log)
         prompt.input_mode = "repl"
         prompt._last_history_len = 0
 
         with patch("readline.get_current_history_length", return_value=1):
             with patch("readline.get_history_item", return_value="x = 1"):
-                str(prompt)  # Trigger history capture
+                str(prompt)
 
-        log.info.assert_called_once_with("x = 1", extra={"tag": "user-repl-in"})
+        assert log.info.call_count == 1
+        log.info.assert_called_with("x = 1", extra={"tag": "user-repl-in"})
 
-    def test_chat_mode_does_not_log_history(self):
-        """In CHAT mode, history should NOT be logged by DynamicPrompt."""
+    def test_repl_mode_does_not_log_to_user_chat(self):
+        """In REPL mode, history should NOT log to user-chat."""
         from unittest.mock import MagicMock, patch
 
         from mahtab.repl.interactive import DynamicPrompt
 
         session = SessionState()
-        ns = {}
         log = MagicMock()
-        prompt = DynamicPrompt(session, ns, log)
+        prompt = DynamicPrompt(session, {}, log)
+        prompt.input_mode = "repl"
+        prompt._last_history_len = 0
+
+        with patch("readline.get_current_history_length", return_value=1):
+            with patch("readline.get_history_item", return_value="x = 1"):
+                str(prompt)
+
+        for call in log.info.call_args_list:
+            assert call.kwargs.get("extra", {}).get("tag") != "user-chat"
+
+    def test_chat_mode_does_not_log_to_user_repl_in(self):
+        """In CHAT mode, DynamicPrompt should NOT log to user-repl-in."""
+        from unittest.mock import MagicMock, patch
+
+        from mahtab.repl.interactive import DynamicPrompt
+
+        session = SessionState()
+        log = MagicMock()
+        prompt = DynamicPrompt(session, {}, log)
         prompt.input_mode = "chat"
         prompt._last_history_len = 0
 
         with patch("readline.get_current_history_length", return_value=1):
-            with patch("readline.get_history_item", return_value="hello there"):
-                str(prompt)  # Trigger history capture
+            with patch("readline.get_history_item", return_value="hello"):
+                str(prompt)
 
-        log.info.assert_not_called()
+        for call in log.info.call_args_list:
+            assert call.kwargs.get("extra", {}).get("tag") != "user-repl-in"
+
+    def test_chat_mode_does_not_double_log(self):
+        """In CHAT mode, DynamicPrompt should not log at all (ask() handles it)."""
+        from unittest.mock import MagicMock, patch
+
+        from mahtab.repl.interactive import DynamicPrompt
+
+        session = SessionState()
+        log = MagicMock()
+        prompt = DynamicPrompt(session, {}, log)
+        prompt.input_mode = "chat"
+        prompt._last_history_len = 0
+
+        with patch("readline.get_current_history_length", return_value=1):
+            with patch("readline.get_history_item", return_value="hello"):
+                str(prompt)
+
+        assert log.info.call_count == 0
 
 
 class TestToggleMode:
