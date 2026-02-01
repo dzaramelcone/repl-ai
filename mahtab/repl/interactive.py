@@ -13,7 +13,7 @@ from mahtab.core.state import SessionState
 from mahtab.io import MemoryStore, setup_logging
 from mahtab.rlm.search import rlm
 from mahtab.tools.files import create_file, open_in_editor, read_file
-from mahtab.tools.skills import load_claude_sessions, load_skill
+from mahtab.tools.skills import load_claude_sessions
 from mahtab.tools.text import grep_raw, partition_raw, peek_raw
 from mahtab.ui.console import console
 from mahtab.ui.panels import print_banner, print_output_panel, print_usage_panel
@@ -351,10 +351,6 @@ def run_repl(ns: dict) -> None:
         """Create a new Python module."""
         return create_file.invoke({"name": name, "content": content})
 
-    def skill(name: str, args: str) -> str:
-        """Load a skill."""
-        return load_skill.invoke({"name": name, "args": args, "skills_dir": session.skills_dir})
-
     def records(tag: str = "") -> None:
         """Show all raw XML records, optionally filtered by tag.
 
@@ -404,7 +400,6 @@ def run_repl(ns: dict) -> None:
             "read": read,
             "edit": edit,
             "create": create,
-            "skill": skill,
             "records": records,
             "model": model,
             "peek": peek_raw,
