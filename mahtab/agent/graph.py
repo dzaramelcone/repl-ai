@@ -6,7 +6,7 @@ import json
 import re
 from typing import TypedDict
 
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel
 
 from mahtab.core.state import SessionState
@@ -79,6 +79,29 @@ def execute_node(state: AgentState) -> dict:
         results.append((output, is_error))
 
     return {"execution_results": results}
+
+
+def update_messages_node(state: AgentState) -> dict:
+    """Update messages with assistant response and execution results.
+
+    Args:
+        state: Current agent state.
+
+    Returns:
+        Dict with updated messages list.
+    """
+    messages = list(state.get("messages", []))
+
+    # Add assistant's response
+    messages.append(AIMessage(content=state["current_response"]))
+
+    # Add execution results as user message
+    results = state.get("execution_results", [])
+    if results:
+        exec_report = "\n\n".join(f"Code block {i + 1} output:\n{out}" for i, (out, _) in enumerate(results))
+        messages.append(HumanMessage(content=f"<execution>\n{exec_report}\n</execution>"))
+
+    return {"messages": messages}
 
 
 def _parse_reflection_response(response: str) -> ReflectionResult:
@@ -232,6 +255,7 @@ def build_agent_graph(llm, max_turns: int = 5):
     graph.add_node("generate", _generate)
     graph.add_node("extract_code", extract_code_node)
     graph.add_node("execute", execute_node)
+    graph.add_node("update_messages", update_messages_node)
     graph.add_node("reflect", _reflect)
 
     # Set entry point
@@ -247,7 +271,8 @@ def build_agent_graph(llm, max_turns: int = 5):
         {"execute": "execute", "end": END},
     )
 
-    graph.add_edge("execute", "reflect")
+    graph.add_edge("execute", "update_messages")
+    graph.add_edge("update_messages", "reflect")
 
     # Conditional: complete? -> end or generate
     graph.add_conditional_edges(

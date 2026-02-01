@@ -219,3 +219,24 @@ def test_build_agent_graph_creates_graph():
     # Verify it's a compiled graph
     assert hasattr(graph, "invoke")
     assert hasattr(graph, "ainvoke")
+
+
+def test_update_messages_after_execution():
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    from mahtab.agent.graph import update_messages_node
+
+    state: AgentState = {
+        "messages": [HumanMessage(content="do something")],
+        "current_response": "Here's code:\n```python\nx=1\n```",
+        "execution_results": [("(no output)", False)],
+    }
+
+    result = update_messages_node(state)
+    new_messages = result["messages"]
+
+    # Should have original + AI response + execution result
+    assert len(new_messages) == 3
+    assert isinstance(new_messages[1], AIMessage)
+    assert isinstance(new_messages[2], HumanMessage)
+    assert "<execution>" in new_messages[2].content
