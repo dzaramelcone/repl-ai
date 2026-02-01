@@ -119,10 +119,11 @@ class ChatClaudeCLI(BaseChatModel):
             self.model,
             "--output-format",
             "stream-json",
-            "--verbose",
             "--tools",
             "",  # Disable all tools for simple chat
             "--disable-slash-commands",  # Disable skills
+            "--setting-sources",
+            "",  # Ignore CLAUDE.md and other config files
         ]
 
         if system:
@@ -188,10 +189,11 @@ class ChatClaudeCLI(BaseChatModel):
             self.model,
             "--output-format",
             "stream-json",
-            "--verbose",
             "--tools",
             "",  # Disable all tools for simple chat
             "--disable-slash-commands",  # Disable skills
+            "--setting-sources",
+            "",  # Ignore CLAUDE.md and other config files
         ]
 
         if system:
