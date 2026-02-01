@@ -153,8 +153,8 @@ def test_streaming_multiple_blocks():
     assert "Second" in "".join(written)
 
 
-def test_streaming_discards_outside_content():
-    """Content outside tags is discarded."""
+def test_streaming_outputs_outside_content():
+    """Content outside known tags is output directly."""
     handler = _make_handler()
     handler.reset()
     written = []
@@ -164,7 +164,23 @@ def test_streaming_discards_outside_content():
 
     assert handler._state == StreamState.OUTSIDE
     assert handler._buffer == ""
-    assert len(written) == 0
+    assert "garbage before" in "".join(written)
+
+
+def test_streaming_outputs_unknown_tags_and_finds_known():
+    """Unknown tags like <thinking> are output, then known tags are handled."""
+    handler = _make_handler()
+    handler.reset()
+    written = []
+    handler._write_smooth = lambda text: written.append(text)
+
+    # Simulate <thinking>...</thinking><assistant-chat>Hello</assistant-chat>
+    handler.process_token("<thinking>some thoughts</thinking><assistant-chat>Hello</assistant-chat>")
+
+    assert handler._state == StreamState.OUTSIDE
+    all_written = "".join(written)
+    assert "<thinking>some thoughts</thinking>" in all_written
+    assert "Hello" in all_written
 
 
 def test_flush_in_chat_state():

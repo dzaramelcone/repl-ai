@@ -103,10 +103,23 @@ class StreamingHandler(BaseCallbackHandler):
             self._write("\n")
             self._code_panel.start()
             return True
+        # Check if buffer could be prefix of a known tag
         for tag in (self._OPEN_CHAT, self._OPEN_REPL):
             if tag.startswith(self._buffer):
                 return False
-        self._buffer = ""
+        # Output unrecognized content up to next '<'
+        next_lt = self._buffer.find("<", 1)
+        if next_lt > 0:
+            self._write_smooth(self._buffer[:next_lt])
+            self._buffer = self._buffer[next_lt:]
+            return True
+        # No '<' found - output buffer unless it ends with partial '<'
+        if self._buffer.endswith("<"):
+            self._write_smooth(self._buffer[:-1])
+            self._buffer = "<"
+        else:
+            self._write_smooth(self._buffer)
+            self._buffer = ""
         return False
 
     def _handle_chat(self) -> bool:
