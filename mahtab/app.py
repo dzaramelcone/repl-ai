@@ -64,10 +64,10 @@ class MahtabApp(App):
     """
 
     BINDINGS = [
-        ("ctrl+n", "new_session", "New Session"),
-        ("ctrl+x", "close_session", "Close Session"),
-        ("ctrl+]", "next_tab", "Next Tab"),
-        ("ctrl+[", "prev_tab", "Previous Tab"),
+        ("f2", "new_session", "New Session"),
+        ("f4", "close_session", "Close Session"),
+        ("f6", "next_tab", "Next Tab"),
+        ("f5", "prev_tab", "Previous Tab"),
     ]
 
     def __init__(self):
