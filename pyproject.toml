@@ -8,3 +8,28 @@ dependencies = [
     "langgraph>=1.0.7",
     "rich",
 ]
+
+[dependency-groups]
+dev = ["ruff", "pre-commit"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # function call in default arg (needed for some patterns)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["rlm"]

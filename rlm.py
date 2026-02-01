@@ -3,6 +3,7 @@ Minimal RLM - Recursive Language Model
 
 The LLM writes code to explore context. That's it.
 """
+
 import re
 import traceback
 
@@ -51,16 +52,16 @@ def rlm(query: str, context: str, depth: int = 0, max_iters: int = 10) -> str:
         return context[:n]
 
     def grep(pattern: str) -> list[str]:
-        return [line for line in context.split('\n') if re.search(pattern, line, re.IGNORECASE)]
+        return [line for line in context.split("\n") if re.search(pattern, line, re.IGNORECASE)]
 
     def partition(n: int = 10) -> list[str]:
         chunk_size = len(context) // n
-        return [context[i:i+chunk_size] for i in range(0, len(context), chunk_size)]
+        return [context[i : i + chunk_size] for i in range(0, len(context), chunk_size)]
 
     def recurse(q: str, subset: str) -> str:
         if depth >= 3:
             return f"[max depth reached, subset is {len(subset)} chars]"
-        return rlm(q, subset, depth=depth+1, max_iters=max_iters)
+        return rlm(q, subset, depth=depth + 1, max_iters=max_iters)
 
     result = {"_final": None}
 
@@ -87,26 +88,25 @@ Depth: {depth}
 
 Write Python code:"""
 
-        console.print(f"\n[dim][depth={depth} iter={i+1}][/]")
+        console.print(f"\n[dim][depth={depth} iter={i + 1}][/]")
 
         # Stream code into a live-updating panel
-        code_buffer = []
-        live = None
+        code_buffer: list[str] = []
 
         def make_panel(code_str: str, done: bool = False) -> Panel:
             title = "[cyan]Generated Code[/]" if done else "[dim cyan]Generating...[/]"
             return Panel(
                 Syntax(code_str or " ", "python", theme="monokai", line_numbers=True),
                 title=title,
-                border_style="cyan" if done else "dim"
+                border_style="cyan" if done else "dim",
             )
 
-        def on_token(token: str):
-            code_buffer.append(token)
-            if live:
-                live.update(make_panel("".join(code_buffer)))
-
         with Live(make_panel(""), console=console, refresh_per_second=15) as live:
+
+            def on_token(token: str, buf: list[str] = code_buffer, lv: Live = live):
+                buf.append(token)
+                lv.update(make_panel("".join(buf)))
+
             response = messages_create(
                 model="claude-opus-4-20250514",
                 max_tokens=2000,
@@ -116,8 +116,8 @@ Write Python code:"""
             )
             # Final update with "done" styling
             code = response["content"][0]["text"].strip()
-            code = re.sub(r'^```python\n?', '', code)
-            code = re.sub(r'\n?```$', '', code)
+            code = re.sub(r"^```python\n?", "", code)
+            code = re.sub(r"\n?```$", "", code)
             live.update(make_panel(code, done=True))
 
         output_buffer.clear()
@@ -156,20 +156,22 @@ Write Python code:"""
             tb = traceback.format_exc()
             # Find the line in the generated code that caused the error
             error_lines = []
-            for line in tb.split('\n'):
-                if '<string>' in line or 'exec(' not in line:
+            for line in tb.split("\n"):
+                if "<string>" in line or "exec(" not in line:
                     error_lines.append(line)
-            error_msg = f"{type(e).__name__}: {e}\n\n" + '\n'.join(error_lines[-5:])
+            error_msg = f"{type(e).__name__}: {e}\n\n" + "\n".join(error_lines[-5:])
             console.print(Panel(error_msg, title="[red]Runtime Error[/]", border_style="red"))
             history += f"\n---\nCode:\n{code}\n\nError: {error_msg}\nFix the error and try again.\n"
             continue
 
         if result["_final"] is not None:
-            console.print(Panel(
-                result['_final'][:500] + ("..." if len(result['_final']) > 500 else ""),
-                title=f"[green]FINAL (depth={depth})[/]",
-                border_style="green"
-            ))
+            console.print(
+                Panel(
+                    result["_final"][:500] + ("..." if len(result["_final"]) > 500 else ""),
+                    title=f"[green]FINAL (depth={depth})[/]",
+                    border_style="green",
+                )
+            )
             return result["_final"]
 
         output = "\n".join(output_buffer) if output_buffer else "(no output)"

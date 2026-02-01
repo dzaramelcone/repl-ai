@@ -2,18 +2,23 @@
 Shared REPL with Claude.
 Claude can execute code in your namespace.
 """
+
 import asyncio
-import re
+import code as code_module
 import json
+import re
+import readline
+import rlcompleter
 import sys
 from pathlib import Path
 
 from rich.console import Console
 from rich.live import Live
+from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.syntax import Syntax
-from rich.panel import Panel
 from rich.text import Text
+
 from rlm import rlm
 
 console = Console()
@@ -46,6 +51,7 @@ def _save_last_session(user_msg: str, assistant_msg: str):
     """Save last exchange for next session."""
     import json
     from datetime import datetime
+
     LAST_SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
     data = {
         "timestamp": datetime.now().isoformat(),
@@ -57,16 +63,15 @@ def _save_last_session(user_msg: str, assistant_msg: str):
 
 def _load_last_session() -> str:
     """Load last session context as XML."""
-    import json
     if not LAST_SESSION_FILE.exists():
         return ""
     try:
         data = json.loads(LAST_SESSION_FILE.read_text())
-        return f"""<prior_session timestamp="{data.get('timestamp', 'unknown')}">
-<human>{data.get('user', '')}</human>
-<assistant>{data.get('assistant', '')}</assistant>
+        return f"""<prior_session timestamp="{data.get("timestamp", "unknown")}">
+<human>{data.get("user", "")}</human>
+<assistant>{data.get("assistant", "")}</assistant>
 </prior_session>"""
-    except:
+    except Exception:
         return ""
 
 
@@ -125,7 +130,7 @@ def _load_skill_descriptions() -> str:
                 frontmatter = content[3:end].strip()
                 for line in frontmatter.split("\n"):
                     if line.startswith("description:"):
-                        desc = line.split(":", 1)[1].strip().strip('"\'')
+                        desc = line.split(":", 1)[1].strip().strip("\"'")
                         break
             except ValueError:
                 pass
@@ -149,7 +154,7 @@ def skill(name: str, args: str = "") -> str:
     if content.startswith("---"):
         try:
             end = content.index("---", 3)
-            content = content[end + 3:].strip()
+            content = content[end + 3 :].strip()
         except ValueError:
             pass
 
@@ -168,20 +173,21 @@ def peek(text: str, n: int = 2000) -> str:
 def grep(text: str, pattern: str) -> list[str]:
     """Return lines matching regex pattern (case-insensitive)."""
     import re
-    return [line for line in text.split('\n') if re.search(pattern, line, re.IGNORECASE)]
+
+    return [line for line in text.split("\n") if re.search(pattern, line, re.IGNORECASE)]
 
 
 def partition(text: str, n: int = 10) -> list[str]:
     """Split text into n roughly equal chunks."""
     chunk_size = max(1, len(text) // n)
-    return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
+    return [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
 
 
-def init(g=None, l=None):
+def init(g=None, loc=None):
     """Initialize with your namespace. Call as: init(globals(), locals())"""
     global _globals, _locals
     _globals = g if g is not None else {}
-    _locals = l if l is not None else _globals
+    _locals = loc if loc is not None else _globals
     # Install REPL capture hooks
     _install_repl_capture()
 
@@ -199,11 +205,26 @@ def _print_output(output: str, is_error: bool = False):
     console.print(Panel(output, title=f"[bold {style}]{title}[/]", border_style=style))
 
 
-async def ask(prompt: str = "", max_turns: int = 5) -> str:
+def ask(prompt: str = "", max_turns: int = 5) -> str:
     """
     Ask Claude something. Claude can execute code in your namespace.
     Streams response to stdout. Returns final text response.
     """
+    try:
+        return asyncio.run(_ask_async(prompt, max_turns))
+    except KeyboardInterrupt:
+        import sys
+
+        sys.stdout.write("\n\033[33m[cancelled]\033[0m\n")
+        sys.stdout.flush()
+        return "(cancelled)"
+    finally:
+        _clear_repl_activity()
+        print("\033[0m", end="", flush=True)
+
+
+async def _ask_async(prompt: str, max_turns: int) -> str:
+    """Async implementation of ask()."""
     global _history
 
     if _globals is None:
@@ -256,7 +277,7 @@ Keep responses concise. Do NOT generate conversation transcripts or include "Use
         response = await _call_claude_stream(system, _history)
 
         # Extract code blocks
-        code_blocks = re.findall(r'```python\n(.*?)```', response, re.DOTALL)
+        code_blocks = re.findall(r"```python\n(.*?)```", response, re.DOTALL)
 
         if not code_blocks:
             # No code, just a text response - we're done
@@ -267,9 +288,9 @@ Keep responses concise. Do NOT generate conversation transcripts or include "Use
         # Execute code blocks and collect output
         # (code already shown during streaming, just show execution output)
         outputs = []
-        for i, code in enumerate(code_blocks):
-            code = code.strip()
-            output = _exec_code(code)
+        for block in code_blocks:
+            block = block.strip()
+            output = _exec_code(block)
             outputs.append(output)
             is_error = output.startswith("Error:")
             _print_output(output, is_error)
@@ -277,10 +298,7 @@ Keep responses concise. Do NOT generate conversation transcripts or include "Use
         # Add assistant response and execution results to history
         _history.append({"role": "assistant", "content": response})
 
-        exec_report = "\n\n".join(
-            f"Code block {i+1} output:\n{out}"
-            for i, out in enumerate(outputs)
-        )
+        exec_report = "\n\n".join(f"Code block {i + 1} output:\n{out}" for i, out in enumerate(outputs))
         _history.append({"role": "user", "content": f"<execution>\n{exec_report}\n</execution>"})
 
     console.print(f"[yellow]⚠ Max turns ({max_turns}) reached. Use ask() again to continue.[/]")
@@ -299,18 +317,18 @@ def _summarize_namespace() -> str:
 
     lines = []
     for name, val in _globals.items():
-        if name.startswith('_'):
+        if name.startswith("_"):
             continue
         try:
             typ = type(val).__name__
-            if isinstance(val, (int, float, str, bool, type(None))):
+            if isinstance(val, int | float | str | bool | type(None)):
                 rep = repr(val)[:50]
-            elif isinstance(val, (list, dict, set, tuple)):
+            elif isinstance(val, list | dict | set | tuple):
                 rep = f"{typ} with {len(val)} items"
             else:
                 rep = typ
             lines.append(f"  {name}: {rep}")
-        except:
+        except Exception:
             lines.append(f"  {name}: <unknown>")
 
     return "\n".join(lines[:30]) or "(no user variables)"
@@ -318,6 +336,7 @@ def _summarize_namespace() -> str:
 
 class _LimitedOutput:
     """StringIO wrapper that raises error if output exceeds limit."""
+
     def __init__(self, limit: int = 10000):
         self.limit = limit
         self.buffer = []
@@ -384,10 +403,15 @@ async def _call_claude_stream(system: str, messages: list) -> str:
     full_prompt = "\n".join(prompt_parts)
 
     proc = await asyncio.create_subprocess_exec(
-        "claude", "-p", full_prompt,
-        "--system-prompt", system,
-        "--setting-sources", "",
-        "--output-format", "stream-json",
+        "claude",
+        "-p",
+        full_prompt,
+        "--system-prompt",
+        system,
+        "--setting-sources",
+        "",
+        "--output-format",
+        "stream-json",
         "--include-partial-messages",
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -418,7 +442,7 @@ async def _call_claude_stream(system: str, messages: list) -> str:
         return Panel(
             Syntax(code or " ", "python", theme="monokai", line_numbers=True),
             title=title,
-            border_style="cyan" if done else "dim"
+            border_style="cyan" if done else "dim",
         )
 
     async def typewriter():
@@ -470,7 +494,7 @@ async def _call_claude_stream(system: str, messages: list) -> str:
                                     code_buffer += char
                                     # Update live code panel
                                     if code_live and not code_buffer.endswith("```"):
-                                        code_live.update(_make_code_panel(code_buffer.rstrip('`')))
+                                        code_live.update(_make_code_panel(code_buffer.rstrip("`")))
                                     # Check for closing ```
                                     if code_buffer.endswith("```"):
                                         # Finalize code panel
@@ -570,9 +594,9 @@ def edit(file_path: str, old: str, new: str) -> str:
     If the file is a Python module that's already imported, it will be reloaded.
     Returns a status message.
     """
-    from pathlib import Path
-    import sys
     import importlib
+    import sys
+    from pathlib import Path
 
     path = Path(file_path).expanduser().resolve()
 
@@ -583,8 +607,8 @@ def edit(file_path: str, old: str, new: str) -> str:
 
     if old not in content:
         # Show a preview of the file to help debug
-        lines = content.split('\n')
-        preview = '\n'.join(lines[:20])
+        lines = content.split("\n")
+        preview = "\n".join(lines[:20])
         return f"Error: old text not found in {path}\n\nFirst 20 lines:\n{preview}"
 
     count = content.count(old)
@@ -596,12 +620,12 @@ def edit(file_path: str, old: str, new: str) -> str:
 
     # Try to reload if it's an imported module
     reloaded = False
-    if path.suffix == '.py':
+    if path.suffix == ".py":
         # Find module name from path
-        for name, mod in list(sys.modules.items()):
+        for _name, mod in list(sys.modules.items()):
             if mod is None:
                 continue
-            mod_file = getattr(mod, '__file__', None)
+            mod_file = getattr(mod, "__file__", None)
             if mod_file and Path(mod_file).resolve() == path:
                 try:
                     importlib.reload(mod)
@@ -627,7 +651,7 @@ def read(file_path: str, start: int = 1, end: int = None) -> str:
     if not path.exists():
         return f"Error: {path} does not exist"
 
-    lines = path.read_text().split('\n')
+    lines = path.read_text().split("\n")
 
     if end is None:
         end = len(lines)
@@ -639,7 +663,7 @@ def read(file_path: str, start: int = 1, end: int = None) -> str:
     for i in range(start - 1, end):
         result.append(f"{i + 1:4d}│ {lines[i]}")
 
-    return '\n'.join(result)
+    return "\n".join(result)
 
 
 def load_claude_sessions(projects_path: str = "~/.claude/projects") -> str:
@@ -659,9 +683,9 @@ def load_claude_sessions(projects_path: str = "~/.claude/projects") -> str:
     # Token estimate (~4 chars per token)
     tokens = len(result) // 4
     if tokens >= 1_000_000:
-        tok_str = f"{tokens/1_000_000:.1f}Mt"
+        tok_str = f"{tokens / 1_000_000:.1f}Mt"
     elif tokens >= 1_000:
-        tok_str = f"{tokens/1_000:.1f}kt"
+        tok_str = f"{tokens / 1_000:.1f}kt"
     else:
         tok_str = f"{tokens}t"
 
@@ -669,35 +693,8 @@ def load_claude_sessions(projects_path: str = "~/.claude/projects") -> str:
     return result
 
 
-def q(prompt: str):
-    """
-    Fire-and-forget ask. Returns a task you can await later.
-    Usage: t = q("do something"); ... ; await t
-    """
-    return asyncio.create_task(ask(prompt))
-
-
-def ask_sync(prompt: str, max_turns: int = 5) -> None:
-    """Synchronous version of ask() - blocks until complete, streams to stdout."""
-    import sys
-    try:
-        asyncio.run(ask(prompt, max_turns))
-    except KeyboardInterrupt:
-        sys.stdout.write("\n\033[33m[cancelled]\033[0m\n")
-        sys.stdout.flush()
-    finally:
-        # Clear REPL activity after ask completes
-        _clear_repl_activity()
-    # Print empty line and reset ANSI to ensure prompt appears correctly
-    print("\033[0m", end="", flush=True)
-
-
 # Modal REPL
-import code
-import readline
-import rlcompleter
-
-class ModalREPL(code.InteractiveConsole):
+class ModalREPL(code_module.InteractiveConsole):
     """REPL that toggles between ask mode (Claude) and python mode."""
 
     def __init__(self, locals=None):
@@ -725,7 +722,7 @@ class ModalREPL(code.InteractiveConsole):
         source = source.rstrip()
 
         # Toggle mode with backtick
-        if source == '`':
+        if source == "`":
             self.ask_mode = not self.ask_mode
             mode = "[magenta]ask[/]" if self.ask_mode else "[cyan]python[/]"
             console.print(f"[dim]switched to {mode} mode[/]")
@@ -736,7 +733,7 @@ class ModalREPL(code.InteractiveConsole):
 
         if self.ask_mode:
             # Send to Claude
-            ask_sync(source)
+            ask(source)
             return False
         else:
             # Normal Python execution
@@ -744,7 +741,6 @@ class ModalREPL(code.InteractiveConsole):
 
     def interact(self, banner=None, exitmsg=None):
         """Custom interact loop with dynamic prompts."""
-        import sys
 
         if banner:
             self.write(f"{banner}\n")
@@ -780,94 +776,53 @@ def run_modal_repl(ns: dict):
 
     # Print banner
     console.print()
-    console.print(Panel(
-        Text.from_markup('''[bold cyan]`[/]                    [dim]→ toggle between ask/python mode[/]
+    console.print(
+        Panel(
+            Text.from_markup("""[bold cyan]`[/]                    [dim]→ toggle between ask/python mode[/]
 [bold cyan]clear[/][dim]()[/]             [dim]→ clear conversation history[/]
 
 [bold magenta]load_claude_sessions[/][dim]() → load ~/.claude/projects/*.jsonl[/]
 [bold magenta]rlm[/][dim](query, context)[/]    [dim]→ recursive LLM search[/]
 
-[dim]In ask mode, just type naturally. In python mode, write code.[/]'''),
-        title='[bold white]mahtab[/]',
-        subtitle='[dim]Ctrl+C to cancel • Ctrl+D to exit[/]',
-        border_style='bright_black'
-    ))
+[dim]In ask mode, just type naturally. In python mode, write code.[/]"""),
+            title="[bold white]mahtab[/]",
+            subtitle="[dim]Ctrl+C to cancel • Ctrl+D to exit[/]",
+            border_style="bright_black",
+        )
+    )
     console.print()
 
     repl.interact()
 
 
-# Background task support
-import threading
-import concurrent.futures
-
-_bg_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
-_bg_tasks: list[concurrent.futures.Future] = []
-
-
-def bg(prompt: str, max_turns: int = 5) -> concurrent.futures.Future:
-    """
-    Run ask() in background thread. Returns a Future.
-
-    Usage:
-        t = bg("do something")  # starts immediately
-        # ... do other stuff ...
-        t.result()  # wait for result (or t.done() to check)
-    """
-    def run():
-        return asyncio.run(ask(prompt, max_turns))
-
-    future = _bg_executor.submit(run)
-    _bg_tasks.append(future)
-    console.print(f"[dim]Started background task #{len(_bg_tasks)}[/]")
-    return future
-
-
-def tasks():
-    """Show status of background tasks."""
-    if not _bg_tasks:
-        console.print("[dim]No background tasks.[/]")
-        return
-
-    for i, t in enumerate(_bg_tasks, 1):
-        if t.done():
-            if t.exception():
-                console.print(f"  [red]#{i}: error - {t.exception()}[/]")
-            else:
-                console.print(f"  [green]#{i}: done[/]")
-        elif t.running():
-            console.print(f"  [yellow]#{i}: running...[/]")
-        else:
-            console.print(f"  [dim]#{i}: pending[/]")
-
-
 def usage():
     """Show cumulative usage stats for this session."""
     s = _usage_stats
-    console.print(Panel(
-        f"""[bold]Session Usage Stats[/]
+    console.print(
+        Panel(
+            f"""[bold]Session Usage Stats[/]
 
-Calls:          {s['num_calls']}
-Total Cost:     ${s['total_cost_usd']:.4f}
+Calls:          {s["num_calls"]}
+Total Cost:     ${s["total_cost_usd"]:.4f}
 
 [dim]Tokens:[/]
-  Input:        {s['input_tokens']:,}
-  Output:       {s['output_tokens']:,}
-  Cache Read:   {s['cache_read_input_tokens']:,}
-  Cache Create: {s['cache_creation_input_tokens']:,}""",
-        title="[cyan]usage()[/]",
-        border_style="dim"
-    ))
+  Input:        {s["input_tokens"]:,}
+  Output:       {s["output_tokens"]:,}
+  Cache Read:   {s["cache_read_input_tokens"]:,}
+  Cache Create: {s["cache_creation_input_tokens"]:,}""",
+            title="[cyan]usage()[/]",
+            border_style="dim",
+        )
+    )
 
 
 # Convenience: auto-init if imported interactively
 if __name__ != "__main__":
     import inspect
+
     frame = inspect.currentframe()
     if frame and frame.f_back:
         init(frame.f_back.f_globals, frame.f_back.f_locals)
-
-
 
 
 # Ensure skills directory exists
@@ -877,24 +832,26 @@ SKILLS_DIR.mkdir(parents=True, exist_ok=True)
 _last_history_len = readline.get_current_history_length()
 
 # ANSI codes
-NUM = '\033[38;5;117m'   # bright blue-ish
-DIM = '\033[38;5;242m'   # grey
-RESET = '\033[0m'
-CYAN = '\033[36m'
-YELLOW = '\033[33m'
+NUM = "\033[38;5;117m"  # bright blue-ish
+DIM = "\033[38;5;242m"  # grey
+RESET = "\033[0m"
+CYAN = "\033[36m"
+
 
 def _approx_tokens(text):
-    '''Rough token estimate: ~4 chars per token'''
+    """Rough token estimate: ~4 chars per token"""
     return len(text) // 4
+
 
 def _format_tokens(n):
     if n >= 1_000_000_000:
-        return f'{NUM}{n/1_000_000_000:.1f}{DIM}Gt'
+        return f"{NUM}{n / 1_000_000_000:.1f}{DIM}Gt"
     elif n >= 1_000_000:
-        return f'{NUM}{n/1_000_000:.1f}{DIM}Mt'
+        return f"{NUM}{n / 1_000_000:.1f}{DIM}Mt"
     elif n >= 1_000:
-        return f'{NUM}{n/1_000:.1f}{DIM}kt'
-    return f'{NUM}{n}{DIM}t'
+        return f"{NUM}{n / 1_000:.1f}{DIM}kt"
+    return f"{NUM}{n}{DIM}t"
+
 
 class DynamicPrompt:
     def __str__(self):
@@ -905,7 +862,7 @@ class DynamicPrompt:
         while _last_history_len < current_len:
             _last_history_len += 1
             item = readline.get_history_item(_last_history_len)
-            if item and not item.startswith('ask('):
+            if item and not item.startswith("ask("):
                 record_input(item)
 
         parts = []
@@ -913,43 +870,54 @@ class DynamicPrompt:
         # Memory
         try:
             import resource
+
             mem_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024
-            parts.append(f'{NUM}{mem_mb:.0f}{DIM}MB')
-        except:
+            parts.append(f"{NUM}{mem_mb:.0f}{DIM}MB")
+        except Exception:
             pass
 
         # Context size (if 'context' var exists)
-        ctx = ns.get('context')
+        ctx = ns.get("context")
         if ctx and isinstance(ctx, str) and len(ctx) > 0:
             toks = _approx_tokens(ctx)
-            parts.append(f'{DIM}ctx:{_format_tokens(toks)}')
+            parts.append(f"{DIM}ctx:{_format_tokens(toks)}")
 
         # History size
         if _history:
-            hist_chars = sum(len(m.get('content', '')) for m in _history)
+            hist_chars = sum(len(m.get("content", "")) for m in _history)
             hist_toks = hist_chars // 4  # ~4 chars per token
-            parts.append(f'{DIM}hist:{_format_tokens(hist_toks)}')
+            parts.append(f"{DIM}hist:{_format_tokens(hist_toks)}")
 
-        # Running background tasks
-        running = len([t for t in _bg_tasks if t.running()])
-        if running > 0:
-            parts.append(f'{YELLOW}⚡{running}{RESET}')
+        info = " ".join(parts)
+        return f"{DIM}{info}{RESET} {CYAN}◈{RESET} " if info else f"{CYAN}◈{RESET} "
 
-        info = ' '.join(parts)
-        return f'{DIM}{info}{RESET} {CYAN}◈{RESET} ' if info else f'{CYAN}◈{RESET} '
 
 sys.ps1 = DynamicPrompt()
-sys.ps2 = '\033[2m⋮\033[0m '
+sys.ps2 = "\033[2m⋮\033[0m "
 
 ns = globals()
-ns.update({'ask': ask, 'clear': clear, 're': re, 'rlm': rlm, 'load_claude_sessions': load_claude_sessions, 'bg': bg, 'tasks': tasks, 'edit': edit, 'read': read, 'skill': skill, 'peek': peek, 'grep': grep, 'partition': partition, 'usage': usage})
+ns.update(
+    {
+        "ask": ask,
+        "clear": clear,
+        "re": re,
+        "rlm": rlm,
+        "load_claude_sessions": load_claude_sessions,
+        "edit": edit,
+        "read": read,
+        "skill": skill,
+        "peek": peek,
+        "grep": grep,
+        "partition": partition,
+        "usage": usage,
+    }
+)
 init(ns, ns)
 
 console.print()
-console.print(Panel(
-    Text.from_markup('''[bold cyan]ask[/][dim](\"prompt\")[/]        [dim]→ ask Claude (streams response)[/]
-[bold cyan]bg[/][dim](\"prompt\")[/]         [dim]→ run in background, returns Future[/]
-[bold cyan]tasks[/][dim]()[/]             [dim]→ show background task status[/]
+console.print(
+    Panel(
+        Text.from_markup("""[bold cyan]ask[/][dim](\"prompt\")[/]        [dim]→ ask Claude (streams response)[/]
 [bold cyan]clear[/][dim]()[/]             [dim]→ clear conversation history[/]
 
 [bold yellow]read[/][dim](path)[/]           [dim]→ read file with line numbers[/]
@@ -959,9 +927,10 @@ console.print(Panel(
 [bold green]peek[/][dim](text, n)[/]        [dim]→ first n chars of text[/]
 [bold green]grep[/][dim](text, pattern)[/]  [dim]→ lines matching regex[/]
 [bold green]partition[/][dim](text, n)[/]   [dim]→ split text into n chunks[/]
-[bold green]rlm[/][dim](query, context)[/]  [dim]→ recursive LLM search[/]'''),
-    title='[bold white]mahtab[/]',
-    subtitle='[dim]Ctrl+C to cancel[/]',
-    border_style='bright_black'
-))
+[bold green]rlm[/][dim](query, context)[/]  [dim]→ recursive LLM search[/]"""),
+        title="[bold white]mahtab[/]",
+        subtitle="[dim]Ctrl+C to cancel[/]",
+        border_style="bright_black",
+    )
+)
 console.print()

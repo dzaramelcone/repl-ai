@@ -1,8 +1,9 @@
 """
 Claude CLI wrapper for rlm.
 """
-import subprocess
+
 import json
+import subprocess
 
 from rich.console import Console
 
@@ -31,11 +32,16 @@ def messages_create(
     proc = subprocess.Popen(
         [
             "claude",
-            "-p", prompt,
-            "--model", model,
-            "--system-prompt", system,
-            "--setting-sources", "",
-            "--output-format", "stream-json",
+            "-p",
+            prompt,
+            "--model",
+            model,
+            "--system-prompt",
+            system,
+            "--setting-sources",
+            "",
+            "--output-format",
+            "stream-json",
             "--include-partial-messages",
         ],
         stdout=subprocess.PIPE,
