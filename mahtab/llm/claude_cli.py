@@ -32,7 +32,6 @@ class ChatClaudeCLI(BaseChatModel):
     model: str = Field(default="claude-opus-4-20250514", description="Claude model identifier")
     max_tokens: int = Field(default=4096, description="Maximum tokens to generate")
     cwd: str = Field(default="/tmp", description="Working directory for subprocess")
-    setting_sources: str | None = Field(default=None, description="Setting sources for Claude CLI")
 
     @property
     def _llm_type(self) -> str:
@@ -121,14 +120,13 @@ class ChatClaudeCLI(BaseChatModel):
             "--output-format",
             "stream-json",
             "--verbose",
-            "--include-partial-messages",
+            "--tools",
+            "",  # Disable all tools for simple chat
+            "--disable-slash-commands",  # Disable skills
         ]
 
         if system:
             cmd.extend(["--system-prompt", system])
-
-        if self.setting_sources is not None:
-            cmd.extend(["--setting-sources", self.setting_sources])
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -190,15 +188,14 @@ class ChatClaudeCLI(BaseChatModel):
             self.model,
             "--output-format",
             "stream-json",
-            "--include-partial-messages",
             "--verbose",
+            "--tools",
+            "",  # Disable all tools for simple chat
+            "--disable-slash-commands",  # Disable skills
         ]
 
         if system:
             cmd.extend(["--system-prompt", system])
-
-        if self.setting_sources is not None:
-            cmd.extend(["--setting-sources", self.setting_sources])
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
