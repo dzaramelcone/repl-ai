@@ -231,23 +231,15 @@ class TestDynamicPromptFormatting:
         # Should contain "MB" for memory
         assert "MB" in result
 
-    def test_prompt_contains_hist_prefix_when_history_exists(self, prompt_with_history):
-        """Prompt should show 'hist:' prefix when there is chat history."""
-        result = str(prompt_with_history)
-        # Should contain "hist:" prefix (not just partial)
-        assert "hist:" in result
-
-    def test_prompt_contains_token_suffix_when_history_exists(self, prompt_with_history):
+    def test_prompt_contains_token_count_when_history_exists(self, prompt_with_history):
         """Prompt should show token count with 't' suffix when there is history."""
         result = str(prompt_with_history)
-        # Should contain "t" for tokens (could be t, kt, Mt, Gt)
-        # The pattern should be digits followed by t or Xt where X is k/M/G
         import re
 
         # Strip ANSI codes for easier matching
         clean = re.sub(r"\x01?\x1b\[[0-9;]*m\x02?", "", result)
         # Should match patterns like "5t" or "1.2kt" or "3.5Mt"
-        assert re.search(r"hist:\d+\.?\d*[kMG]?t", clean), f"Expected hist:Nt pattern in '{clean}'"
+        assert re.search(r"\d+\.?\d*[kMG]?t", clean), f"Expected Nt pattern in '{clean}'"
 
     def test_prompt_contains_cost_when_usage_exists(self, prompt_with_usage):
         """Prompt should show cost with $ prefix when there is usage."""

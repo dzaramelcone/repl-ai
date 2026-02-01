@@ -111,7 +111,7 @@ class DynamicPrompt:
         if self.session.messages:
             hist_chars = sum(len(str(m.content)) for m in self.session.messages)
             hist_toks = hist_chars // 4
-            parts.append(f"{DIM}hist:{_format_tokens(hist_toks)}")
+            parts.append(_format_tokens(hist_toks))
 
         # Usage stats (cost)
         if self.session.usage.num_calls > 0:
@@ -123,7 +123,7 @@ class DynamicPrompt:
             mode_indicator = f"{GREEN}◇ ai{RESET}"
         else:
             mode_indicator = f"{CYAN}◈ py{RESET}"
-        return f"{info} {mode_indicator} " if info else f"{mode_indicator} "
+        return f"{info}{RESET} {mode_indicator} " if info else f"{mode_indicator} "
 
 
 class InteractiveREPL(code.InteractiveConsole):
