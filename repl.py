@@ -5,6 +5,8 @@ Claude can execute code in your namespace.
 import asyncio
 import re
 import json
+import sys
+from pathlib import Path
 
 from rich.console import Console
 from rich.live import Live
@@ -20,12 +22,110 @@ _globals = None
 _locals = None
 _history = []
 
+# Capture REPL activity between ask() calls
+_repl_activity = []
+_original_displayhook = None
+
+# Skills directory
+SKILLS_DIR = Path("~/.mahtab/skills").expanduser()
+
+
+def _capture_displayhook(value):
+    """Capture REPL output for context."""
+    if value is not None:
+        _repl_activity.append(f">>> {repr(value)}")
+    # Call original displayhook
+    if _original_displayhook:
+        _original_displayhook(value)
+
+
+def _install_repl_capture():
+    """Install hooks to capture REPL activity."""
+    global _original_displayhook
+    if _original_displayhook is None:
+        _original_displayhook = sys.displayhook
+        sys.displayhook = _capture_displayhook
+
+
+def record_input(code: str):
+    """Record user input to REPL activity. Call this from the REPL."""
+    _repl_activity.append(f">>> {code}")
+
+
+def _get_repl_context(max_chars: int = 4000) -> str:
+    """Get recent REPL activity, truncated to max_chars."""
+    if not _repl_activity:
+        return ""
+    text = "\n".join(_repl_activity)
+    if len(text) > max_chars:
+        text = "...\n" + text[-max_chars:]
+    return text
+
+
+def _clear_repl_activity():
+    """Clear REPL activity buffer after ask()."""
+    _repl_activity.clear()
+
+
+def _load_skill_descriptions() -> str:
+    """Load skill descriptions from SKILLS_DIR."""
+    if not SKILLS_DIR.exists():
+        return ""
+
+    descriptions = []
+    for skill_file in sorted(SKILLS_DIR.glob("*.md")):
+        content = skill_file.read_text()
+        name = skill_file.stem
+
+        # Parse YAML frontmatter
+        desc = name  # Default description
+        if content.startswith("---"):
+            try:
+                end = content.index("---", 3)
+                frontmatter = content[3:end].strip()
+                for line in frontmatter.split("\n"):
+                    if line.startswith("description:"):
+                        desc = line.split(":", 1)[1].strip().strip('"\'')
+                        break
+            except ValueError:
+                pass
+
+        descriptions.append(f"  {name}: {desc}")
+
+    if descriptions:
+        return "Skills (use skill(name) to invoke):\n" + "\n".join(descriptions)
+    return ""
+
+
+def skill(name: str, args: str = "") -> str:
+    """Load and return a skill's full content."""
+    skill_file = SKILLS_DIR / f"{name}.md"
+    if not skill_file.exists():
+        return f"Error: skill '{name}' not found in {SKILLS_DIR}"
+
+    content = skill_file.read_text()
+
+    # Strip frontmatter
+    if content.startswith("---"):
+        try:
+            end = content.index("---", 3)
+            content = content[end + 3:].strip()
+        except ValueError:
+            pass
+
+    # Replace $ARGUMENTS placeholder
+    content = content.replace("$ARGUMENTS", args)
+
+    return content
+
 
 def init(g=None, l=None):
     """Initialize with your namespace. Call as: init(globals(), locals())"""
     global _globals, _locals
     _globals = g if g is not None else {}
     _locals = l if l is not None else _globals
+    # Install REPL capture hooks
+    _install_repl_capture()
 
 
 def _print_code(code: str, title: str = "Code"):
@@ -53,6 +153,8 @@ async def ask(prompt: str, max_turns: int = 5) -> str:
 
     # Build context about available variables
     var_summary = _summarize_namespace()
+    skill_descriptions = _load_skill_descriptions()
+    repl_context = _get_repl_context()
 
     system = f"""You're in a shared Python REPL with the user. You can see and modify their namespace.
 
@@ -67,9 +169,13 @@ Large text exploration:
   load_claude_sessions() -> str     # Load all ~/.claude/projects/*.jsonl into a string
   rlm(query, context) -> str        # Recursive LLM search over large context
 
+{skill_descriptions}
+
 Inside rlm, you have: peek(n), grep(pattern), partition(n), FINAL(answer)
 
 When you want to run code, output a fenced python block. The code will execute in the user's namespace and you'll see the output. You can run multiple code blocks in one response.
+
+{f"Recent REPL activity:{chr(10)}{repl_context}" if repl_context else ""}
 
 When you're done and have a final answer, just respond with text (no code block).
 
@@ -501,6 +607,9 @@ def ask_sync(prompt: str, max_turns: int = 5) -> None:
     except KeyboardInterrupt:
         sys.stdout.write("\n\033[33m[cancelled]\033[0m\n")
         sys.stdout.flush()
+    finally:
+        # Clear REPL activity after ask completes
+        _clear_repl_activity()
     # Print empty line and reset ANSI to ensure prompt appears correctly
     print("\033[0m", end="", flush=True)
 

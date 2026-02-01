@@ -3,7 +3,8 @@ cd /Users/dzaramelcone/lab/rlm
 exec uv run python -i -c "
 import sys
 import re
-from repl import ask_sync as ask, clear, init, console, bg, tasks, _bg_tasks, edit, read, load_claude_sessions
+import readline
+from repl import ask_sync as ask, clear, init, console, bg, tasks, _bg_tasks, edit, read, load_claude_sessions, skill, record_input, _repl_activity, SKILLS_DIR
 from rlm import rlm
 from rich.panel import Panel
 from rich.text import Text
@@ -11,6 +12,12 @@ from rich.text import Text
 # Dynamic prompt with system info
 import os
 from repl import _history
+
+# Ensure skills directory exists
+SKILLS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Track readline history position to capture input
+_last_history_len = readline.get_current_history_length()
 
 # ANSI codes
 NUM = '\033[38;5;117m'   # bright blue-ish
@@ -34,6 +41,16 @@ def _format_tokens(n):
 
 class DynamicPrompt:
     def __str__(self):
+        global _last_history_len
+
+        # Capture any new readline history entries (user input)
+        current_len = readline.get_current_history_length()
+        while _last_history_len < current_len:
+            _last_history_len += 1
+            item = readline.get_history_item(_last_history_len)
+            if item and not item.startswith('ask('):
+                record_input(item)
+
         parts = []
 
         # Memory
@@ -53,7 +70,7 @@ class DynamicPrompt:
         # History size
         if _history:
             hist_chars = sum(len(m.get('content', '')) for m in _history)
-            hist_toks = _approx_tokens(hist_chars)
+            hist_toks = hist_chars // 4  # ~4 chars per token
             parts.append(f'{DIM}hist:{_format_tokens(hist_toks)}')
 
         # Running background tasks
@@ -68,7 +85,7 @@ sys.ps1 = DynamicPrompt()
 sys.ps2 = '\033[2m⋮\033[0m '
 
 ns = globals()
-ns.update({'ask': ask, 'clear': clear, 're': re, 'rlm': rlm, 'load_claude_sessions': load_claude_sessions, 'bg': bg, 'tasks': tasks, 'edit': edit, 'read': read})
+ns.update({'ask': ask, 'clear': clear, 're': re, 'rlm': rlm, 'load_claude_sessions': load_claude_sessions, 'bg': bg, 'tasks': tasks, 'edit': edit, 'read': read, 'skill': skill})
 init(ns, ns)
 
 console.print()
@@ -80,6 +97,7 @@ console.print(Panel(
 
 [bold yellow]read[/][dim](path)[/]           [dim]→ read file with line numbers[/]
 [bold yellow]edit[/][dim](path, old, new)[/] [dim]→ replace text in file[/]
+[bold yellow]skill[/][dim](name)[/]          [dim]→ invoke a skill from ~/.mahtab/skills/[/]
 
 [bold magenta]load_claude_sessions[/][dim]() → load ~/.claude/projects/*.jsonl[/]
 [bold magenta]rlm[/][dim](query, context)[/]    [dim]→ recursive LLM search[/]'''),
