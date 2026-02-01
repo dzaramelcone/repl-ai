@@ -42,9 +42,8 @@ class REPLAgent(BaseModel):
 
     _graph: Any = PrivateAttr(default=None)
 
-    def model_post_init(self, context) -> None:
+    def model_post_init(self, _) -> None:
         """Build the graph after model initialization."""
-        del context  # unused but required by Pydantic
         self._graph = build_agent_graph(llm=self.llm, max_turns=self.max_turns)
 
     async def ask(
