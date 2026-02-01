@@ -743,20 +743,61 @@ def ed(content: str = "", path: str | None = None, suffix: str = ".py") -> str:
         file_path = Path(path).expanduser()
         subprocess.call([editor, str(file_path)])
         return file_path.read_text()
-    else:
-        # Use temp file
-        with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False) as f:
-            f.write(content)
-            temp_path = f.name
 
-        try:
-            subprocess.call([editor, temp_path])
-            with open(temp_path) as f:
-                result = f.read()
-        finally:
-            os.unlink(temp_path)
+    # Build header with help and context
+    header_lines = [
+        "# ╭─────────────────────────────────────────────────────────────╮",
+        "# │  VIM: i=insert  Esc=normal  :wq=save+quit  :q!=quit no save │",
+        "# │  Delete these comments. Only text below --- is returned.   │",
+        "# ╰─────────────────────────────────────────────────────────────╯",
+    ]
 
-        return result
+    # Add last assistant message as context
+    if _history:
+        for msg in reversed(_history):
+            if msg["role"] == "assistant":
+                last_response = msg["content"]
+                # Truncate and format as comments
+                preview = last_response[:500]
+                if len(last_response) > 500:
+                    preview += "..."
+                header_lines.append("#")
+                header_lines.append("# Last response from Claude:")
+                for line in preview.split("\n"):
+                    header_lines.append(f"#   {line}")
+                break
+
+    header_lines.append("#")
+    header_lines.append("# --- YOUR MESSAGE BELOW (everything above this line is ignored) ---")
+    header_lines.append("")
+
+    header = "\n".join(header_lines)
+    full_content = header + content
+
+    # Use temp file
+    with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False) as f:
+        f.write(full_content)
+        temp_path = f.name
+
+    try:
+        subprocess.call([editor, temp_path])
+        with open(temp_path) as f:
+            result = f.read()
+    finally:
+        os.unlink(temp_path)
+
+    # Strip header - find the marker line and return everything after
+    marker = "# --- YOUR MESSAGE BELOW"
+    if marker in result:
+        _, _, after = result.partition(marker)
+        # Skip the rest of the marker line and the blank line after
+        lines = after.split("\n", 2)
+        if len(lines) >= 2:
+            result = lines[2] if len(lines) > 2 else ""
+        else:
+            result = ""
+
+    return result.strip()
 
 
 def load_claude_sessions(projects_path: str = "~/.claude/projects") -> str:
