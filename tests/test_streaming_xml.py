@@ -89,7 +89,7 @@ def test_streaming_repl_content_accumulated():
         handler.process_token("<assistant-repl-in>")
         handler.process_token("x = 42")
 
-    assert "x = 42" in handler._code_buffer
+    assert "x = 42" in handler._code_panel.buffer
 
 
 def test_streaming_partial_tag_waits():
