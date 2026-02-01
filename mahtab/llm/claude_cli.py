@@ -122,8 +122,7 @@ class ChatClaudeCLI(BaseChatModel):
         if system:
             cmd.extend(["--system-prompt", system])
 
-        if self.setting_sources:
-            cmd.extend(["--setting-sources", self.setting_sources])
+        cmd.extend(["--setting-sources", self.setting_sources])
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
@@ -187,8 +186,7 @@ class ChatClaudeCLI(BaseChatModel):
         if system:
             cmd.extend(["--system-prompt", system])
 
-        if self.setting_sources:
-            cmd.extend(["--setting-sources", self.setting_sources])
+        cmd.extend(["--setting-sources", self.setting_sources])
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
