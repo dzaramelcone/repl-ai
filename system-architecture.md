@@ -1,503 +1,757 @@
-# System Architecture
+# Mahtab System Architecture
 
-## Project Overview
-
-**mahtab** is an AI-powered shared Python REPL that integrates Claude AI for interactive programming assistance. The system creates a collaborative environment where Claude can execute code directly in the user's namespace, inspect variables, modify files, and explore large text contexts using recursive search strategies.
-
-### Key Features
-
-- **Shared Namespace**: Claude sees and modifies the same variables as the user
-- **Streaming Responses**: Real-time typewriter animation with live code panel updates
-- **Multi-turn Agentic Loop**: Claude can execute multiple code blocks per turn, iterating until complete
-- **File Operations**: Read, edit, and create files with automatic module reloading
-- **Text Exploration Tools**: `peek()`, `grep()`, `partition()` for navigating large data
-- **Recursive LLM Search (RLM)**: Code-generating exploration algorithm for massive contexts
-- **Skills System**: Extensible skill files in `~/.mahtab/skills/`
-- **Session Persistence**: Last exchange saved for cross-session continuity
-- **Usage Tracking**: Token counts and cost tracking per session
+**Version:** 0.2.0  
+**Description:** AI-powered shared Python REPL with Claude integration
 
 ---
 
-## Architecture Diagram
+## Table of Contents
 
-```mermaid
-flowchart TB
-    subgraph entry [Entry Point]
-        ClaudeRepl[claude-repl<br/>bash script]
-    end
+1. [Overview](#overview)
+2. [High-Level Architecture](#high-level-architecture)
+3. [Module Structure](#module-structure)
+4. [Core Components](#core-components)
+5. [Data Flow](#data-flow)
+6. [Key Concepts](#key-concepts)
+7. [Component Details](#component-details)
 
-    subgraph core [Core REPL - repl.py]
-        Init[init<br/>Namespace Setup]
-        Ask[ask<br/>Conversation Engine]
-        ExecCode[_exec_code<br/>Code Execution]
-        Stream[_call_claude_stream<br/>Streaming Handler]
-        
-        subgraph tools [Built-in Tools]
-            FileOps[read / edit / create]
-            TextTools[peek / grep / partition]
-            Skills[skill loader]
-            Sessions[load_claude_sessions]
-        end
-        
-        subgraph ui [UI Layer]
-            Console[Rich Console]
-            Panels[Code Panels]
-            Typewriter[Typewriter Animation]
-        end
-    end
+---
 
-    subgraph auth [Claude CLI Wrapper - auth.py]
-        MsgCreate[messages_create<br/>CLI subprocess]
-    end
+## Overview
 
-    subgraph rlm [RLM Engine - rlm.py]
-        RLMFunc[rlm<br/>Recursive Search]
-        RLMTools[peek / grep / partition / FINAL]
-    end
+Mahtab is a collaborative Python REPL environment where Claude (an AI assistant) can:
+- Execute code directly in the user's namespace
+- Inspect and modify variables
+- Read and edit files
+- Explore large text contexts using recursive search strategies (RLM)
 
-    subgraph external [External]
-        ClaudeCLI[Claude CLI]
-        FileSystem[File System]
-        UserNamespace[User Namespace<br/>globals / locals]
-    end
+The system creates a **shared namespace** between the user and Claude, enabling true collaboration where both parties can see and modify the same Python state.
 
-    ClaudeRepl --> Init
-    Init --> UserNamespace
-    Ask --> Stream
-    Stream --> ClaudeCLI
-    Ask --> ExecCode
-    ExecCode --> UserNamespace
-    ExecCode --> tools
-    FileOps --> FileSystem
-    RLMFunc --> MsgCreate
-    MsgCreate --> ClaudeCLI
-    tools --> ui
-    Stream --> ui
+### Key Dependencies
+
+```
+langchain-core >= 0.3.0    # LLM abstractions and message types
+langchain >= 0.3.0         # Tool decorators and chains
+langgraph >= 0.2.0         # Graph-based agent workflows (future use)
+pydantic >= 2.0.0          # Data validation and state models
+rich >= 13.0.0             # Terminal UI (panels, syntax highlighting)
+```
+
+---
+
+## High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              USER INTERFACE                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────┐    ┌─────────────────────────────────────────┐ │
+│  │   Interactive REPL      │    │         Modal REPL                      │ │
+│  │   (interactive.py)      │    │         (modal.py)                      │ │
+│  │                         │    │                                         │ │
+│  │   • Dynamic prompt      │    │   • Backtick mode switching             │ │
+│  │   • ask() function      │    │   • Python ↔ Ask modes                  │ │
+│  │   • Inline with Python  │    │   • Tab completion                      │ │
+│  └───────────┬─────────────┘    └───────────────┬─────────────────────────┘ │
+└──────────────┼──────────────────────────────────┼───────────────────────────┘
+               │                                  │
+               ▼                                  ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              AGENT LAYER                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                       REPLAgent (repl_agent.py)                       │   │
+│  │  ┌────────────────────────────────────────────────────────────────┐  │   │
+│  │  │                    AGENTIC LOOP                                │  │   │
+│  │  │                                                                │  │   │
+│  │  │   ┌─────────┐     ┌──────────────┐     ┌───────────────┐      │  │   │
+│  │  │   │  User   │────▶│ Claude LLM   │────▶│ Code Blocks?  │      │  │   │
+│  │  │   │ Prompt  │     │  Response    │     │               │      │  │   │
+│  │  │   └─────────┘     └──────────────┘     └───────┬───────┘      │  │   │
+│  │  │                                                │               │  │   │
+│  │  │        ┌───────────────────────────────────────┼───────────┐  │  │   │
+│  │  │        │                    │ Yes              │ No        │  │  │   │
+│  │  │        │                    ▼                  ▼           │  │   │
+│  │  │        │          ┌─────────────────┐  ┌─────────────┐    │  │   │
+│  │  │        │          │Execute in       │  │ Return Text │    │  │   │
+│  │  │        │          │Namespace        │  │ Response    │    │  │   │
+│  │  │        │          └────────┬────────┘  └─────────────┘    │  │   │
+│  │  │        │                   │                               │  │   │
+│  │  │        │                   ▼                               │  │   │
+│  │  │        │        ┌─────────────────────┐                   │  │   │
+│  │  │        └────────│ Send Results Back   │◀──────────────────┘  │   │
+│  │  │                 │ to Claude           │                      │  │   │
+│  │  │                 └─────────────────────┘                      │  │   │
+│  │  │                 (loop until no code or max_turns)            │  │   │
+│  │  └────────────────────────────────────────────────────────────┘  │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              CORE LAYER                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌────────────────┐   ┌────────────────┐   ┌────────────────────────────┐   │
+│  │  SessionState  │   │   Executor     │   │    Namespace Manager       │   │
+│  │   (state.py)   │   │ (executor.py)  │   │    (namespace.py)          │   │
+│  │                │   │                │   │                            │   │
+│  │ • globals_ns   │   │ • execute_code │   │ • init_namespace           │   │
+│  │ • locals_ns    │   │ • LimitedOutput│   │ • reload_module_if_imported│   │
+│  │ • messages     │   │ • sandboxed    │   │ • ensure_cwd_in_path       │   │
+│  │ • usage stats  │   │   execution    │   │                            │   │
+│  └────────────────┘   └────────────────┘   └────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              LLM LAYER                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────┐   ┌───────────────────────────┐    │
+│  │        ChatClaudeCLI                │   │        Prompts            │    │
+│  │        (claude_cli.py)              │   │       (prompts.py)        │    │
+│  │                                     │   │                           │    │
+│  │  • LangChain BaseChatModel impl     │   │ • REPL system prompt      │    │
+│  │  • Calls `claude` CLI subprocess    │   │ • RLM system prompt       │    │
+│  │  • stream-json output format        │   │ • Context-aware building  │    │
+│  │  • Async streaming support          │   │                           │    │
+│  └─────────────────────────────────────┘   └───────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              TOOLS LAYER                                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌───────────────┐   ┌───────────────┐   ┌────────────────────────────────┐ │
+│  │  File Tools   │   │  Text Tools   │   │       Skills                   │ │
+│  │  (files.py)   │   │  (text.py)    │   │      (skills.py)               │ │
+│  │               │   │               │   │                                │ │
+│  │ • read_file   │   │ • peek        │   │ • load_skill_descriptions      │ │
+│  │ • edit_file   │   │ • grep        │   │ • load_skill                   │ │
+│  │ • create_file │   │ • partition   │   │ • load_claude_sessions         │ │
+│  │ • open_editor │   │ • *_raw       │   │                                │ │
+│  └───────────────┘   └───────────────┘   └────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     RECURSIVE LANGUAGE MODEL (RLM)                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                        rlm() Function (search.py)                     │   │
+│  │                                                                       │   │
+│  │   LLM writes code to explore large contexts recursively               │   │
+│  │                                                                       │   │
+│  │   ┌─────────────────────────────────────────────────────────────┐    │   │
+│  │   │                    RLM EXECUTION LOOP                        │    │   │
+│  │   │                                                              │    │   │
+│  │   │   Query + Context ──▶ LLM generates Python code              │    │   │
+│  │   │                              │                               │    │   │
+│  │   │                              ▼                               │    │   │
+│  │   │                     Execute in sandbox                       │    │   │
+│  │   │                     (limited builtins)                       │    │   │
+│  │   │                              │                               │    │   │
+│  │   │              ┌───────────────┼────────────────┐              │    │   │
+│  │   │              │               │                │              │    │   │
+│  │   │              ▼               ▼                ▼              │    │   │
+│  │   │         peek()          grep()         partition()           │    │   │
+│  │   │         rlm()           FINAL()                              │    │   │
+│  │   │        (recurse)       (terminate)                           │    │   │
+│  │   │                                                              │    │   │
+│  │   └─────────────────────────────────────────────────────────────┘    │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              UI LAYER                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌────────────────┐   ┌────────────────┐   ┌──────────────────────────────┐ │
+│  │    Console     │   │  Streaming     │   │         Panels               │ │
+│  │  (console.py)  │   │ (streaming.py) │   │       (panels.py)            │ │
+│  │                │   │                │   │                              │ │
+│  │ • Rich Console │   │ • Typewriter   │   │ • print_code_panel           │ │
+│  │   singleton    │   │   effect       │   │ • print_output_panel         │ │
+│  │                │   │ • Code panel   │   │ • print_banner               │ │
+│  │                │   │   detection    │   │ • print_usage_panel          │ │
+│  │                │   │ • Spinner      │   │                              │ │
+│  └────────────────┘   └────────────────┘   └──────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Module Structure
+
+```
+mahtab/
+├── __init__.py           # Package exports: SessionState, UsageStats
+├── __main__.py           # Entry point: python -m mahtab
+│
+├── agent/                # Agent logic
+│   ├── __init__.py
+│   └── repl_agent.py     # REPLAgent class with agentic loop
+│
+├── core/                 # Core infrastructure
+│   ├── __init__.py
+│   ├── executor.py       # Code execution with output limiting
+│   ├── namespace.py      # Namespace management and module reloading
+│   └── state.py          # SessionState and UsageStats Pydantic models
+│
+├── llm/                  # LLM integration
+│   ├── __init__.py
+│   ├── claude_cli.py     # ChatClaudeCLI - LangChain wrapper for claude CLI
+│   └── prompts.py        # System prompts for REPL and RLM
+│
+├── repl/                 # REPL implementations
+│   ├── __init__.py
+│   ├── interactive.py    # Standard interactive REPL with ask()
+│   └── modal.py          # Modal REPL with backtick mode switching
+│
+├── rlm/                  # Recursive Language Model
+│   ├── __init__.py
+│   └── search.py         # RLM algorithm implementation
+│
+├── tools/                # LangChain tools
+│   ├── __init__.py
+│   ├── files.py          # File operations (read, edit, create)
+│   ├── skills.py         # Skill management
+│   └── text.py           # Text exploration (peek, grep, partition)
+│
+└── ui/                   # Terminal UI
+    ├── __init__.py
+    ├── console.py        # Rich console singleton
+    ├── panels.py         # Panel rendering utilities
+    └── streaming.py      # Streaming output handler
+```
+
+---
+
+## Core Components
+
+### 1. SessionState (state.py)
+
+The central state container that holds everything for a REPL session:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                         SessionState                                 │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐   │
+│  │   globals_ns     │  │    locals_ns     │  │    messages      │   │
+│  │   dict[str,Any]  │  │   dict[str,Any]  │  │ list[BaseMessage]│   │
+│  │                  │  │                  │  │                  │   │
+│  │ User's global    │  │ User's local     │  │ Conversation     │   │
+│  │ namespace        │  │ namespace        │  │ history          │   │
+│  └──────────────────┘  └──────────────────┘  └──────────────────┘   │
+│                                                                      │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐   │
+│  │  repl_activity   │  │      usage       │  │    skills_dir    │   │
+│  │    list[str]     │  │   UsageStats     │  │      Path        │   │
+│  │                  │  │                  │  │                  │   │
+│  │ Recent user      │  │ Token/cost       │  │ ~/.mahtab/skills │   │
+│  │ commands         │  │ tracking         │  │                  │   │
+│  └──────────────────┘  └──────────────────┘  └──────────────────┘   │
+│                                                                      │
+│  Methods:                                                            │
+│  • init_namespace(globals, locals)  - Initialize with caller's ns   │
+│  • add_user_message(content)        - Add human message to history  │
+│  • add_assistant_message(content)   - Add AI message to history     │
+│  • summarize_namespace(max_vars)    - Describe current variables    │
+│  • save_last_session(user, asst)    - Persist last exchange         │
+│  • load_last_session()              - Load previous session context │
+│  • get_activity_context(max_chars)  - Get recent REPL activity      │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 2. REPLAgent (repl_agent.py)
+
+The agent implements an **agentic loop** pattern:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        REPLAgent                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Attributes:                                                     │
+│  • session: SessionState      - The shared state                │
+│  • llm: BaseChatModel         - Claude CLI wrapper              │
+│  • max_turns: int = 5         - Safety limit for loop           │
+│                                                                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│                    AGENTIC LOOP FLOW                            │
+│                                                                  │
+│     ┌──────────────────────────────────────────────────────┐    │
+│     │  1. Build system prompt with:                        │    │
+│     │     • Variable summary (summarize_namespace)         │    │
+│     │     • Available skills (load_skill_descriptions)     │    │
+│     │     • Recent REPL activity (get_activity_context)    │    │
+│     │     • Prior session context (load_last_session)      │    │
+│     └──────────────────────────────────────────────────────┘    │
+│                              │                                   │
+│                              ▼                                   │
+│     ┌──────────────────────────────────────────────────────┐    │
+│     │  2. Stream response from Claude                      │    │
+│     │     • Track tokens for typewriter effect             │    │
+│     │     • Accumulate usage stats (cost, tokens)          │    │
+│     └──────────────────────────────────────────────────────┘    │
+│                              │                                   │
+│                              ▼                                   │
+│     ┌──────────────────────────────────────────────────────┐    │
+│     │  3. Extract code blocks: ```python\n(.*?)```         │    │
+│     └──────────────────────────────────────────────────────┘    │
+│                              │                                   │
+│              ┌───────────────┴───────────────┐                  │
+│              │ No code blocks                │ Has code blocks  │
+│              ▼                               ▼                  │
+│     ┌─────────────────┐          ┌─────────────────────────┐   │
+│     │  Return text    │          │  Execute each block     │   │
+│     │  response       │          │  in session.globals_ns  │   │
+│     └─────────────────┘          └─────────────────────────┘   │
+│                                              │                  │
+│                                              ▼                  │
+│                                  ┌─────────────────────────┐   │
+│                                  │  Append execution       │   │
+│                                  │  results to messages    │   │
+│                                  │  <execution>...</exec>  │   │
+│                                  └─────────────────────────┘   │
+│                                              │                  │
+│                                              ▼                  │
+│                                  ┌─────────────────────────┐   │
+│                                  │  Loop back to step 2    │   │
+│                                  │  (until no code or      │   │
+│                                  │   max_turns reached)    │   │
+│                                  └─────────────────────────┘   │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 3. ChatClaudeCLI (claude_cli.py)
+
+A LangChain `BaseChatModel` implementation that shells out to the `claude` CLI:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      ChatClaudeCLI                               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Configuration:                                                  │
+│  • model: str = "claude-opus-4-20250514"                         │
+│  • max_tokens: int = 4096                                        │
+│  • cwd: str = "/tmp"      (subprocess working directory)         │
+│                                                                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Message Flow:                                                   │
+│                                                                  │
+│   LangChain Messages          Claude CLI                         │
+│   ─────────────────          ──────────                          │
+│                                                                  │
+│   [SystemMessage,     ──▶    claude -p "<conversation>           │
+│    HumanMessage,              <human>...</human>                 │
+│    AIMessage, ...]            <assistant>...</assistant>         │
+│                               </conversation>"                   │
+│                               --system-prompt "..."              │
+│                               --output-format stream-json        │
+│                                                                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Streaming Output (stream-json format):                          │
+│                                                                  │
+│   {"type": "stream_event",                                       │
+│    "event": {                                                    │
+│      "type": "content_block_delta",                              │
+│      "delta": {"type": "text_delta", "text": "..."}              │
+│    }}                                                            │
+│                                                                  │
+│   {"type": "result",                                             │
+│    "usage": {"input_tokens": N, "output_tokens": M, ...},        │
+│    "total_cost_usd": 0.XX}                                       │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 4. Code Executor (executor.py)
+
+Safe code execution with output limiting:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        execute_code()                            │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Input: code (str), session (SessionState)                       │
+│  Output: (output_string, is_error)                               │
+│                                                                  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                    EXECUTION FLOW                          │  │
+│  │                                                            │  │
+│  │  1. Redirect stdout to LimitedOutput (10KB limit)          │  │
+│  │                                                            │  │
+│  │  2. Try eval(code) first (for expressions)                 │  │
+│  │     • If result is not None, print repr(result)            │  │
+│  │                                                            │  │
+│  │  3. If SyntaxError, fall back to exec(code)                │  │
+│  │     • For statements (assignments, loops, etc.)            │  │
+│  │                                                            │  │
+│  │  4. Execute in session's namespace:                        │  │
+│  │     • globals_ns: session.globals_ns                       │  │
+│  │     • locals_ns: session.locals_ns                         │  │
+│  │                                                            │  │
+│  │  5. Return captured output or error message                │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                  │
+│  LimitedOutput class:                                            │
+│  • Raises RuntimeError if output exceeds 10KB                    │
+│  • Prevents Claude from generating infinite output               │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Data Flow
+
+### User Interaction Flow
+
+```
+User types: ask("explain this code")
+                    │
+                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    ask() in interactive.py                       │
+└─────────────────────────────────────────────────────────────────┘
+                    │
+                    │ 1. Build system prompt with context
+                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│            build_repl_system_prompt()                            │
+│                                                                  │
+│  Includes:                                                       │
+│  • summarize_namespace() → "x: 42, df: DataFrame with 100 rows"  │
+│  • load_skill_descriptions() → "debug: Debug Python code"        │
+│  • get_activity_context() → ">>> x = 42\n>>> df = pd.read..."    │
+│  • load_last_session() → "<prior_session>...</prior_session>"    │
+└─────────────────────────────────────────────────────────────────┘
+                    │
+                    │ 2. Add user message to history
+                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│         session.messages.append(HumanMessage(prompt))            │
+└─────────────────────────────────────────────────────────────────┘
+                    │
+                    │ 3. Stream response from Claude
+                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  ChatClaudeCLI.astream()                         │
+│                                                                  │
+│  Subprocess: claude -p "..." --model claude-opus-4-20250514           │
+│              --output-format stream-json                         │
+└─────────────────────────────────────────────────────────────────┘
+                    │
+                    │ 4. Process streaming tokens
+                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              StreamingHandler.process_token()                    │
+│                                                                  │
+│  • Spinner → first token stops spinner                           │
+│  • Text → typewriter output                                      │
+│  • ```python\n → switch to live code panel                       │
+│  • ``` → finalize code panel                                     │
+└─────────────────────────────────────────────────────────────────┘
+                    │
+                    │ 5. Extract and execute code blocks
+                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│            re.findall(r"```python\n(.*?)```", response)          │
+│                              │                                   │
+│                              ▼                                   │
+│                    execute_code(block, session)                  │
+│                              │                                   │
+│                              ▼                                   │
+│               ┌──────────────────────────────┐                  │
+│               │ eval/exec in session.globals │                  │
+│               │ Shared namespace with user!  │                  │
+│               └──────────────────────────────┘                  │
+└─────────────────────────────────────────────────────────────────┘
+                    │
+                    │ 6. Send results back to Claude
+                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  session.messages.append(                                        │
+│    HumanMessage("<execution>Code block 1 output:\n...</exec>")   │
+│  )                                                               │
+└─────────────────────────────────────────────────────────────────┘
+                    │
+                    │ 7. Loop continues until no code blocks
+                    ▼
+              Final text response
+```
+
+### RLM (Recursive Language Model) Flow
+
+```
+User: rlm("find the bug", huge_log_file)
+                    │
+                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  rlm() in search.py                              │
+│                                                                  │
+│  Depth: 0, Max Iterations: 10, Max Depth: 3                      │
+└─────────────────────────────────────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              BUILD RLM SYSTEM PROMPT                             │
+│                                                                  │
+│  "You explore data by writing Python code.                       │
+│   You have access to:                                            │
+│     context: str (~50,000 chars)                                 │
+│   Tools: peek(), grep(), partition(), rlm(), FINAL()"            │
+└─────────────────────────────────────────────────────────────────┘
+                    │
+                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│              ITERATION LOOP (max 10 iterations)                  │
+│                                                                  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ 1. LLM generates Python code                              │  │
+│  │                                                            │  │
+│  │    # LLM output:                                           │  │
+│  │    lines = grep("ERROR")                                   │  │
+│  │    if len(lines) > 100:                                    │  │
+│  │        chunks = partition(10)                              │  │
+│  │        for i, chunk in enumerate(chunks):                  │  │
+│  │            result = rlm("find bug", chunk)  # RECURSE      │  │
+│  │            if "found" in result:                           │  │
+│  │                FINAL(result)                               │  │
+│  │    else:                                                   │  │
+│  │        FINAL(lines[0])                                     │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                              │                                   │
+│                              ▼                                   │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │ 2. Execute in SANDBOXED environment                       │  │
+│  │                                                            │  │
+│  │    local_vars = {                                          │  │
+│  │      "context": context,                                   │  │
+│  │      "peek": peek,                                         │  │
+│  │      "grep": grep,                                         │  │
+│  │      "partition": partition,                               │  │
+│  │      "rlm": recurse,      # Wrapped to track depth         │  │
+│  │      "FINAL": FINAL,      # Terminates the loop            │  │
+│  │      "print": capture_print,                               │  │
+│  │    }                                                       │  │
+│  │                                                            │  │
+│  │    exec(code, {"__builtins__": {}}, local_vars)            │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                              │                                   │
+│              ┌───────────────┴───────────────┐                  │
+│              │ FINAL() called                │ No FINAL()       │
+│              ▼                               ▼                  │
+│     ┌─────────────────┐          ┌─────────────────────────┐   │
+│     │  Return result  │          │  Add output to history  │   │
+│     │  and stop       │          │  Continue loop          │   │
+│     └─────────────────┘          └─────────────────────────┘   │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Key Concepts
+
+### 1. Shared Namespace
+
+The fundamental design principle is **namespace sharing**:
+
+```python
+# User's Python REPL
+>>> x = 42
+>>> df = pd.read_csv("data.csv")
+
+# Claude can see and use these variables
+>>> ask("what's the mean of column A?")
+# Claude generates:
+#   print(df["A"].mean())
+# Executes in same namespace, sees df!
+
+# Claude can also create new variables
+# that the user can then use
+>>> # Claude created 'result' variable
+>>> print(result)
+```
+
+### 2. Agentic Loop Pattern
+
+Claude operates in a loop:
+1. Receive prompt
+2. Generate response (may include code)
+3. If code present → execute → send results back → goto 2
+4. If no code → conversation complete
+
+This allows Claude to:
+- Try something, see the error, fix it
+- Build up complex results incrementally
+- React to actual execution results
+
+### 3. Context-Aware Prompts
+
+System prompts are dynamically built with:
+- **Variable summary**: What's in the namespace
+- **Recent activity**: What the user has been typing
+- **Prior session**: Last conversation (for continuity)
+- **Skills**: Available skill files
+
+### 4. Output Limiting
+
+Safety mechanism to prevent runaway output:
+- `LimitedOutput` class caps output at 10KB
+- Forces Claude to use `peek()`, `grep()` for large data
+- Encourages efficient exploration strategies
+
+### 5. RLM (Recursive Language Model)
+
+A novel approach to exploring large contexts:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     RLM EXPLORATION STRATEGY                     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Large Context (e.g., 100KB log file)                            │
+│         │                                                        │
+│         ▼                                                        │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │  peek(2000) → Understand structure                          ││
+│  │  "Looks like JSON logs, one per line"                       ││
+│  └─────────────────────────────────────────────────────────────┘│
+│         │                                                        │
+│         ▼                                                        │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │  grep("ERROR") → Find relevant sections                     ││
+│  │  Returns 50 matching lines                                  ││
+│  └─────────────────────────────────────────────────────────────┘│
+│         │                                                        │
+│         ▼                                                        │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │  If too many results:                                       ││
+│  │    partition(10) → Split into chunks                        ││
+│  │    rlm(query, chunk) → Recursively search each              ││
+│  └─────────────────────────────────────────────────────────────┘│
+│         │                                                        │
+│         ▼                                                        │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │  FINAL(answer) → Terminate with result                      ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Component Details
 
-### 1. Entry Point - `claude-repl`
+### Tools Available to Claude
 
-A minimal bash script that launches the interactive REPL:
+| Tool | Purpose | Example |
+|------|---------|---------|
+| `read(path)` | Read file with line numbers | `read("main.py", 1, 50)` |
+| `edit(path, old, new)` | Replace text in file | `edit("main.py", "bug", "fix")` |
+| `create(name)` | Create new Python module | `create("utils")` → utils.py |
+| `peek(text, n)` | First n chars of text | `peek(log, 2000)` |
+| `grep(text, pattern)` | Lines matching regex | `grep(log, "ERROR")` |
+| `partition(text, n)` | Split into n chunks | `partition(log, 10)` |
+| `rlm(query, context)` | Recursive LLM search | `rlm("find bug", log)` |
+| `skill(name)` | Invoke a skill | `skill("debug")` |
 
-```bash
-#!/bin/bash
-exec uv run python -i -m repl
-```
+### REPL Modes
 
-Uses `uv` for dependency management and runs Python in interactive mode (`-i`) loading the `repl` module.
+| Mode | Entry | Prompt | Behavior |
+|------|-------|--------|----------|
+| **Interactive** | `mahtab` or `python -m mahtab` | `◈` (cyan) | Python + `ask()` inline |
+| **Modal Python** | Toggle with `` ` `` | `◈` (cyan) | Pure Python execution |
+| **Modal Ask** | Toggle with `` ` `` | `◈` (magenta) | Direct Claude conversation |
 
----
-
-### 2. Main REPL Module - `repl.py`
-
-The core 985-line module containing all primary functionality.
-
-#### Namespace Management
-
-```
-_globals: dict    # Caller's global namespace
-_locals: dict     # Caller's local namespace  
-_history: list    # Conversation message history
-_repl_activity: list  # Captured REPL input/output between ask() calls
-```
-
-The `init(globals(), locals())` function captures the caller's namespace, enabling Claude to see and modify user variables.
-
-#### Conversation Engine - `ask()`
-
-The main entry point for Claude interactions:
-
-| Function | Purpose |
-|----------|---------|
-| `ask(prompt, max_turns=5)` | Send prompt to Claude, execute code blocks |
-| `_ask_async()` | Async implementation with multi-turn loop |
-| `_call_claude_stream()` | Subprocess Claude CLI with streaming JSON |
-| `_summarize_namespace()` | Build context about available variables |
-
-#### Code Execution - `_exec_code()`
-
-Executes Claude-generated Python in the shared namespace:
-- Tries `eval()` first (for expressions)
-- Falls back to `exec()` (for statements)
-- Output limited to 10,000 characters via `_LimitedOutput`
-- Returns captured stdout or error message
-
-#### File Operations
-
-| Function | Description |
-|----------|-------------|
-| `read(path, start=1, end=None)` | Read file with line numbers |
-| `edit(path, old, new)` | Replace text, auto-reload Python modules |
-| `create(name, content="")` | Create new Python module with package support |
-| `ed(content="", path=None)` | Open `$EDITOR` for text editing |
-
-#### Text Exploration Tools
-
-| Function | Description |
-|----------|-------------|
-| `peek(text, n=2000)` | Return first n characters |
-| `grep(text, pattern)` | Return lines matching regex (case-insensitive) |
-| `partition(text, n=10)` | Split into n roughly equal chunks |
-
-#### Skills System
-
-Skills are markdown files in `~/.mahtab/skills/` with optional YAML frontmatter:
-
-```python
-SKILLS_DIR = Path("~/.mahtab/skills").expanduser()
-
-def skill(name, args="") -> str:
-    # Load skill file, strip frontmatter, replace $ARGUMENTS
-```
-
-#### UI Layer
-
-Rich library components for terminal output:
-- `_print_code()` - Syntax-highlighted code panels
-- `_print_output()` - Execution result panels
-- Typewriter animation with `output_queue` and async drain
-- Live-updating code panels during streaming
-
-#### Modal REPL
-
-Alternative interface with mode toggling:
-- Backtick (`` ` ``) toggles between ask mode and python mode
-- Cyan prompt for Python, magenta for ask mode
-- Tab completion via readline
-
----
-
-### 3. Claude CLI Wrapper - `auth.py`
-
-Provides `messages_create()` to wrap the Claude CLI:
-
-```python
-def messages_create(
-    model: str,
-    max_tokens: int,
-    system: str,
-    messages: list[dict],
-    on_token: callable = None,
-) -> dict
-```
-
-**CLI Invocation:**
-```bash
-claude -p <prompt> \
-    --model <model> \
-    --system-prompt <system> \
-    --setting-sources "" \
-    --output-format stream-json \
-    --include-partial-messages
-```
-
-**Stream Processing:**
-- Parses `stream_event` with `content_block_delta` for tokens
-- Calls `on_token(text)` callback for live UI updates
-- Extracts final result from `type: "result"` event
-
----
-
-### 4. Recursive LLM Search - `rlm.py`
-
-Implements the RLM algorithm where the LLM writes code to explore large contexts.
-
-#### System Prompt
-
-```
-You explore data by writing Python code.
-
-Tools:
-  peek(n=2000) -> str              # First n chars of context
-  grep(pattern) -> list[str]       # Lines matching regex
-  partition(n=10) -> list[str]     # Split into n chunks
-  rlm(query, subset) -> str        # Recursively explore subset
-  FINAL(answer)                    # Return answer and stop
-```
-
-#### Algorithm Parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `depth` | 0 | Current recursion depth |
-| `max_depth` | 3 | Maximum recursion depth |
-| `max_iters` | 10 | Max iterations per depth level |
-
-#### Execution Sandbox
-
-Code runs in a restricted namespace:
-```python
-local_vars = {
-    "context": context,
-    "peek": peek,
-    "grep": grep,
-    "partition": partition,
-    "rlm": recurse,
-    "FINAL": FINAL,
-    "print": capture_print,
-    "re": re,
-    "len": len,
-}
-exec(code, {"__builtins__": {}}, local_vars)
-```
-
----
-
-## Data Flow Diagram
-
-### Main Conversation Flow
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant REPL as repl.py
-    participant Claude as Claude CLI
-    participant Namespace as User Namespace
-
-    User->>REPL: ask("prompt")
-    REPL->>REPL: Build system context<br/>(vars, skills, activity)
-    REPL->>REPL: Append to _history
-    
-    loop max_turns (default 5)
-        REPL->>Claude: subprocess with stream-json
-        Claude-->>REPL: Stream tokens
-        REPL->>REPL: Typewriter animation
-        REPL->>REPL: Extract code blocks
-        
-        alt Has code blocks
-            loop Each code block
-                REPL->>Namespace: exec(code)
-                Namespace-->>REPL: Output / Error
-                REPL->>REPL: Display output panel
-            end
-            REPL->>REPL: Add execution results to history
-        else No code blocks
-            REPL->>REPL: Final text response
-            REPL->>REPL: Save session
-            REPL-->>User: Return
-        end
-    end
-```
-
-### RLM Recursive Flow
-
-```mermaid
-sequenceDiagram
-    participant Caller
-    participant RLM as rlm()
-    participant Claude as Claude CLI
-    participant Sandbox as Execution Sandbox
-
-    Caller->>RLM: rlm(query, context)
-    
-    loop max_iters (default 10)
-        RLM->>RLM: Build prompt with history
-        RLM->>Claude: messages_create()
-        Claude-->>RLM: Generated Python code
-        RLM->>RLM: Display code panel
-        
-        RLM->>Sandbox: exec(code)
-        
-        alt FINAL() called
-            Sandbox-->>RLM: answer
-            RLM-->>Caller: Return answer
-        else rlm() called recursively
-            Sandbox->>RLM: rlm(subquery, subset)
-            Note over RLM: depth + 1, max depth = 3
-        else Error
-            Sandbox-->>RLM: Exception
-            RLM->>RLM: Add error to history
-        else Normal output
-            Sandbox-->>RLM: print output
-            RLM->>RLM: Add to history
-        end
-    end
-    
-    RLM-->>Caller: "Max iterations reached"
-```
-
----
-
-## REPL Interaction Flow
-
-```mermaid
-flowchart LR
-    subgraph input [User Input]
-        TypeCode[Type Python code]
-        TypeAsk[ask prompt]
-        TypeBacktick[Backtick toggle]
-    end
-
-    subgraph modes [REPL Modes]
-        PythonMode[Python Mode<br/>cyan prompt]
-        AskMode[Ask Mode<br/>magenta prompt]
-    end
-
-    subgraph execution [Execution]
-        LocalExec[Local Python exec]
-        ClaudeCall[Claude API Call]
-        CodeExec[Execute Claude code]
-    end
-
-    subgraph output [Output]
-        DirectOutput[Direct stdout]
-        StreamedResponse[Streamed text]
-        CodePanel[Code panel]
-        OutputPanel[Output panel]
-    end
-
-    TypeCode --> PythonMode
-    TypeAsk --> PythonMode
-    TypeBacktick --> modes
-    
-    PythonMode --> LocalExec
-    AskMode --> ClaudeCall
-    
-    LocalExec --> DirectOutput
-    ClaudeCall --> StreamedResponse
-    ClaudeCall --> CodePanel
-    CodePanel --> CodeExec
-    CodeExec --> OutputPanel
-```
-
----
-
-## File Structure
-
-```
-repl-ai/
-├── claude-repl           # Entry point bash script
-├── repl.py               # Main REPL module (985 lines)
-│   ├── Namespace management
-│   ├── ask() conversation engine
-│   ├── _exec_code() execution
-│   ├── File operations (read/edit/create)
-│   ├── Text tools (peek/grep/partition)
-│   ├── Skills loader
-│   ├── ModalREPL class
-│   └── UI components
-├── auth.py               # Claude CLI wrapper (98 lines)
-│   └── messages_create()
-├── rlm.py                # Recursive LLM search (183 lines)
-│   └── rlm() algorithm
-├── pyproject.toml        # Project configuration
-├── uv.lock               # Dependency lock file
-└── .pre-commit-config.yaml
-```
-
-### User Data Directories
+### File Persistence
 
 ```
 ~/.mahtab/
-├── skills/               # Skill markdown files
-│   └── *.md
-└── last_session.json     # Cross-session context
+├── skills/                 # Custom skills (*.md files)
+│   ├── debug.md
+│   └── refactor.md
+└── last_session.json       # Last conversation for continuity
+    {
+      "timestamp": "2025-01-31T...",
+      "user": "explain this code",
+      "assistant": "This code does..."
+    }
 ```
 
 ---
 
-## Dependencies
+## Entry Points
 
-### Runtime Dependencies
+### 1. Command Line
 
-| Package | Purpose |
-|---------|---------|
-| `anthropic` | Anthropic API types (not directly used for calls) |
-| `rich` | Terminal UI (panels, syntax highlighting, spinners) |
-| `langchain` | LangChain framework |
-| `langgraph` | LangGraph for agent workflows |
+```bash
+# Using uv (recommended)
+uv run mahtab
 
-### Development Dependencies
+# As Python module
+python -m mahtab
 
-| Package | Purpose |
-|---------|---------|
-| `ruff` | Linting and formatting |
-| `pre-commit` | Git hooks |
-
-### External Tools
-
-| Tool | Purpose |
-|------|---------|
-| `claude` CLI | Anthropic's Claude Code CLI for API calls |
-| `uv` | Python package/project manager |
-| `$EDITOR` | External editor for `ed()` function |
-
----
-
-## Key Design Patterns
-
-### 1. Subprocess-based API Calls
-
-Instead of using the Anthropic Python SDK directly, the system shells out to the `claude` CLI:
-- Avoids SDK version dependencies
-- Leverages Claude Code's built-in streaming
-- Uses `--output-format stream-json` for structured parsing
-
-### 2. Shared Namespace Execution
-
-Claude's code runs in the user's actual namespace:
-```python
-exec(code, _globals, _locals)
-```
-This enables true collaboration where Claude can inspect and modify the same objects the user is working with.
-
-### 3. Output Limiting
-
-Both main REPL and RLM limit output to prevent context explosion:
-```python
-class _LimitedOutput:
-    def __init__(self, limit: int = 10000):
-        # Raises RuntimeError if exceeded
+# Interactive mode with existing namespace
+uv run python -i -m mahtab
 ```
 
-### 4. Multi-turn Agentic Loop
-
-The `ask()` function implements an agentic pattern:
-1. Send prompt to Claude
-2. If response contains code blocks, execute them
-3. Feed execution results back to Claude
-4. Repeat until Claude responds with just text (no code)
-5. Maximum `max_turns` iterations (default 5)
-
-### 5. Recursive Exploration (RLM)
-
-For exploring massive contexts (e.g., all Claude session logs):
-1. LLM generates exploration code
-2. Code uses `peek()`, `grep()`, `partition()` to navigate
-3. Can recursively call `rlm()` on subsets
-4. `FINAL(answer)` terminates with result
-5. Max depth prevents infinite recursion
-
----
-
-## Usage Statistics Tracking
-
-Session-level metrics tracked in `_usage_stats`:
+### 2. Programmatic
 
 ```python
-_usage_stats = {
-    "total_cost_usd": 0.0,
-    "input_tokens": 0,
-    "output_tokens": 0,
-    "cache_read_input_tokens": 0,
-    "cache_creation_input_tokens": 0,
-    "num_calls": 0,
-}
-```
+from mahtab.repl.interactive import run_repl
+from mahtab.agent.repl_agent import create_repl_agent
+from mahtab.core.state import SessionState
 
-View with `usage()` function.
+# Option 1: Run full REPL
+run_repl(ns=globals())
+
+# Option 2: Use agent directly
+session = SessionState()
+session.init_namespace(globals())
+agent = create_repl_agent(session=session)
+response = agent.ask_sync("analyze this data")
+```
 
 ---
 
-## Security Considerations
+## Design Decisions
 
-1. **Code Execution**: Claude-generated code runs with full access to the user's namespace and file system
-2. **RLM Sandbox**: Uses `{"__builtins__": {}}` to restrict available functions, but still has file system access via the tools
-3. **No Network Restrictions**: Code can make network calls
-4. **Session Persistence**: Last exchange stored in plaintext at `~/.mahtab/last_session.json`
+### Why CLI subprocess instead of API?
 
-This is designed as a personal development tool, not for untrusted input.
+The `claude` CLI is used instead of direct API calls for:
+- **Authentication**: Relies on Claude Code's auth
+- **Consistency**: Same model behavior as Claude Code
+- **Simplicity**: No API key management needed
+
+### Why LangChain?
+
+- **BaseChatModel**: Standard interface for LLMs
+- **Message types**: HumanMessage, AIMessage, SystemMessage
+- **Tool decorators**: `@tool` for function tools
+- **Future**: LangGraph for more complex agent patterns
+
+### Why Pydantic?
+
+- **Validation**: SessionState fields are validated
+- **Serialization**: Easy JSON export for persistence
+- **Type hints**: IDE autocomplete and type checking
+
+---
+
+## Future Considerations
+
+1. **LangGraph Integration**: The `langgraph` dependency suggests plans for more sophisticated agent workflows
+2. **Tool Use**: LangChain tools are defined but not yet used as official tool calls (code is extracted via regex)
+3. **Modal REPL**: The backtick mode switching provides a foundation for different interaction paradigms
