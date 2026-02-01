@@ -2,4 +2,9 @@
 name = "rlm"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["anthropic", "rich"]
+dependencies = [
+    "anthropic",
+    "langchain>=1.2.7",
+    "langgraph>=1.0.7",
+    "rich",
+]
