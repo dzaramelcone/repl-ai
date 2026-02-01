@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import code
 import re
 import readline
+import rlcompleter
 import sys
 
 from mahtab.agent.repl_agent import create_repl_agent
@@ -29,6 +31,33 @@ GREEN = "\033[32m"
 def _approx_tokens(text: str) -> int:
     """Rough token estimate: ~4 chars per token."""
     return len(text) // 4
+
+
+def is_toggle_command(text: str) -> bool:
+    """Check if input is the mode toggle command.
+
+    Args:
+        text: The user input text.
+
+    Returns:
+        True if this is a toggle command (single slash).
+    """
+    return text.strip() == "/"
+
+
+def should_route_to_chat(text: str, mode: str) -> bool:
+    """Check if input should be routed to chat based on mode.
+
+    Args:
+        text: The user input text.
+        mode: Current input mode ("repl" or "chat").
+
+    Returns:
+        True if input should go to ask(), False for Python interpreter.
+    """
+    if not text.strip():
+        return False
+    return mode == "chat"
 
 
 def _format_tokens(n: int) -> str:
@@ -95,6 +124,89 @@ class DynamicPrompt:
         else:
             symbol = f"{CYAN}◈{RESET}"
         return f"{DIM}{info}{RESET} {symbol} " if info else f"{symbol} "
+
+
+class InteractiveREPL(code.InteractiveConsole):
+    """REPL with mode switching between Python and chat.
+
+    Type '/' on its own line to toggle between modes:
+    - REPL mode (cyan diamond): Execute Python code directly
+    - CHAT mode (green diamond): Send input to Claude
+
+    Attributes:
+        prompt_obj: DynamicPrompt instance for visual feedback.
+        ask_func: Function to call for chat mode input.
+    """
+
+    def __init__(self, locals: dict, prompt_obj: DynamicPrompt, ask_func):
+        super().__init__(locals)
+        self.prompt_obj = prompt_obj
+        self.ask_func = ask_func
+
+        # Enable tab completion
+        if locals:
+            readline.set_completer(rlcompleter.Completer(locals).complete)
+            readline.parse_and_bind("tab: complete")
+
+    def runsource(self, source: str, filename: str = "<input>", symbol: str = "single") -> bool:
+        """Execute source code or send to chat.
+
+        Args:
+            source: The source code or chat prompt.
+            filename: The filename for error messages.
+            symbol: The symbol for compilation.
+
+        Returns:
+            True if more input is needed, False otherwise.
+        """
+        source = source.rstrip()
+
+        # Toggle mode with '/'
+        if is_toggle_command(source):
+            self.prompt_obj.toggle_mode()
+            mode_name = "[green]chat[/]" if self.prompt_obj.input_mode == "chat" else "[cyan]repl[/]"
+            console.print(f"[dim]switched to {mode_name} mode[/]")
+            return False
+
+        if not source:
+            return False
+
+        # Route based on mode
+        if should_route_to_chat(source, self.prompt_obj.input_mode):
+            self.ask_func(source)
+            return False
+        else:
+            # Normal Python execution
+            return super().runsource(source, filename, symbol)
+
+    def interact(self, banner: str = "", exitmsg: str = "") -> None:
+        """Custom interact loop with dynamic prompts.
+
+        Args:
+            banner: Banner to display at start.
+            exitmsg: Message to display on exit.
+        """
+        if banner:
+            self.write(f"{banner}\n")
+
+        more = False
+        while True:
+            try:
+                if more:
+                    prompt = sys.ps2
+                else:
+                    prompt = str(self.prompt_obj)
+                line = input(prompt)
+                more = self.push(line)
+            except KeyboardInterrupt:
+                console.print("\n[dim]KeyboardInterrupt[/]")
+                self.resetbuffer()
+                more = False
+            except EOFError:
+                break
+
+        if exitmsg:
+            self.write(f"{exitmsg}\n")
 
 
 def run_repl(ns: dict) -> None:
@@ -211,9 +323,14 @@ def run_repl(ns: dict) -> None:
         }
     )
 
-    # Set up dynamic prompt
-    sys.ps1 = DynamicPrompt(session, ns)
+    # Set up prompts
+    prompt_obj = DynamicPrompt(session, ns)
+    sys.ps1 = prompt_obj
     sys.ps2 = "\033[2m⋮\033[0m "
 
     # Print banner
     print_banner(console=console)
+
+    # Create and run modal REPL
+    repl = InteractiveREPL(locals=ns, prompt_obj=prompt_obj, ask_func=ask)
+    repl.interact()
