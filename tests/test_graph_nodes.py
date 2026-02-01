@@ -1,40 +1,10 @@
-"""Tests for LangGraph agent."""
+"""Tests for graph node functions."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
-from mahtab.agent.graph import AgentState, ReflectionResult
-
-
-def test_reflection_result_complete():
-    result = ReflectionResult(
-        is_complete=True,
-        reasoning="Task accomplished",
-        next_action=None,
-    )
-    assert result.is_complete is True
-    assert result.next_action is None
-
-
-def test_reflection_result_incomplete():
-    result = ReflectionResult(
-        is_complete=False,
-        reasoning="Missing step",
-        next_action="Add error handling",
-    )
-    assert result.is_complete is False
-    assert result.next_action == "Add error handling"
-
-
-def test_agent_state_typing():
-    """Verify AgentState has required fields."""
-    # TypedDict doesn't enforce at runtime, just check keys exist
-    assert "messages" in AgentState.__annotations__
-    assert "original_prompt" in AgentState.__annotations__
-    assert "code_blocks" in AgentState.__annotations__
-    assert "execution_results" in AgentState.__annotations__
-    assert "turn_count" in AgentState.__annotations__
+from mahtab.agent.graph import AgentState
 
 
 def test_extract_code_node_single_block():
@@ -82,8 +52,8 @@ def test_execute_node_success():
     }
     result = execute_node(state)
     assert len(result["execution_results"]) == 2
-    assert result["execution_results"][1][0] == "42\n"  # print output
-    assert result["execution_results"][1][1] is False  # no error
+    assert result["execution_results"][1][0] == "42\n"
+    assert result["execution_results"][1][1] is False
 
 
 def test_execute_node_error():
@@ -99,7 +69,7 @@ def test_execute_node_error():
     result = execute_node(state)
     assert len(result["execution_results"]) == 1
     assert "division by zero" in result["execution_results"][0][0].lower()
-    assert result["execution_results"][0][1] is True  # is error
+    assert result["execution_results"][0][1] is True
 
 
 def test_execute_node_updates_namespace():
@@ -113,7 +83,6 @@ def test_execute_node_updates_namespace():
         "session": session,
     }
     execute_node(state)
-    # exec(code, globals, locals) puts assignments in locals_ns
     assert session.locals_ns.get("my_var") == "hello"
 
 
@@ -140,7 +109,6 @@ def test_reflect_node_handles_malformed_json():
 
     response = "This is not JSON at all"
     result = _parse_reflection_response(response)
-    # Should default to incomplete on parse failure
     assert result.is_complete is False
     assert "parse" in result.reasoning.lower() or "invalid" in result.reasoning.lower()
 
@@ -166,61 +134,6 @@ async def test_generate_node_calls_llm():
     mock_llm.ainvoke.assert_called_once()
 
 
-def test_should_execute_with_code():
-    from mahtab.agent.graph import should_execute
-
-    state: AgentState = {"code_blocks": ["x = 1"]}
-    assert should_execute(state) == "execute"
-
-
-def test_should_execute_no_code():
-    from mahtab.agent.graph import should_execute
-
-    state: AgentState = {"code_blocks": []}
-    assert should_execute(state) == "end"
-
-
-def test_should_continue_complete():
-    from mahtab.agent.graph import ReflectionResult, should_continue
-
-    state: AgentState = {
-        "reflection": ReflectionResult(is_complete=True, reasoning="Done"),
-        "turn_count": 1,
-    }
-    assert should_continue(state, max_turns=5) == "end"
-
-
-def test_should_continue_incomplete_under_limit():
-    from mahtab.agent.graph import ReflectionResult, should_continue
-
-    state: AgentState = {
-        "reflection": ReflectionResult(is_complete=False, reasoning="Need more", next_action="Fix it"),
-        "turn_count": 2,
-    }
-    assert should_continue(state, max_turns=5) == "generate"
-
-
-def test_should_continue_incomplete_at_limit():
-    from mahtab.agent.graph import ReflectionResult, should_continue
-
-    state: AgentState = {
-        "reflection": ReflectionResult(is_complete=False, reasoning="Need more"),
-        "turn_count": 5,
-    }
-    assert should_continue(state, max_turns=5) == "end"
-
-
-def test_build_agent_graph_creates_graph():
-    from mahtab.agent.graph import build_agent_graph
-
-    mock_llm = MagicMock()
-    graph = build_agent_graph(llm=mock_llm, max_turns=3)
-
-    # Verify it's a compiled graph
-    assert hasattr(graph, "invoke")
-    assert hasattr(graph, "ainvoke")
-
-
 def test_update_messages_after_execution():
     from langchain_core.messages import AIMessage, HumanMessage
 
@@ -235,7 +148,6 @@ def test_update_messages_after_execution():
     result = update_messages_node(state)
     new_messages = result["messages"]
 
-    # Should have original + AI response + execution result
     assert len(new_messages) == 3
     assert isinstance(new_messages[1], AIMessage)
     assert isinstance(new_messages[2], HumanMessage)

@@ -55,8 +55,10 @@ def extract_code_node(state: AgentState) -> dict:
     Returns:
         Dict with code_blocks list to merge into state.
     """
+    print(">>> extract_code_node")
     response = state.get("current_response", "")
     blocks = re.findall(r"```python\n(.*?)```", response, re.DOTALL)
+    print("    found %d code blocks", len(blocks))
     return {"code_blocks": [b.strip() for b in blocks]}
 
 
@@ -69,15 +71,20 @@ def execute_node(state: AgentState) -> dict:
     Returns:
         Dict with execution_results list to merge into state.
     """
+    print(">>> execute_node")
     from mahtab.core.executor import execute_code
 
     session = state["session"]
     results = []
 
-    for block in state.get("code_blocks", []):
+    for i, block in enumerate(state.get("code_blocks", [])):
+        print("    executing block %d", i + 1)
         output, is_error = execute_code(block, session)
         results.append((output, is_error))
+        if is_error:
+            print("    block %d errored: %s", i + 1, output[:100] if output else "")
 
+    print("    executed %d blocks, %d errors", len(results), sum(1 for _, e in results if e))
     return {"execution_results": results}
 
 
@@ -90,6 +97,7 @@ def update_messages_node(state: AgentState) -> dict:
     Returns:
         Dict with updated messages list.
     """
+    print(">>> update_messages_node")
     messages = list(state.get("messages", []))
 
     # Add assistant's response
@@ -101,6 +109,7 @@ def update_messages_node(state: AgentState) -> dict:
         exec_report = "\n\n".join(f"Code block {i + 1} output:\n{out}" for i, (out, _) in enumerate(results))
         messages.append(HumanMessage(content=f"<execution>\n{exec_report}\n</execution>"))
 
+    print("    message count: %d", len(messages))
     return {"messages": messages}
 
 
@@ -145,6 +154,8 @@ async def generate_node(state: AgentState, llm) -> dict:
     Returns:
         Dict with current_response and incremented turn_count.
     """
+    turn = state.get("turn_count", 0) + 1
+    print(">>> generate_node (turn %d)", turn)
     from langchain_core.messages import SystemMessage
 
     messages = [
@@ -152,11 +163,13 @@ async def generate_node(state: AgentState, llm) -> dict:
         *state["messages"],
     ]
 
+    print("    invoking LLM with %d messages", len(messages))
     response = await llm.ainvoke(messages)
+    print("    got response (%d chars)", len(response.content))
 
     return {
         "current_response": response.content,
-        "turn_count": state.get("turn_count", 0) + 1,
+        "turn_count": turn,
     }
 
 
@@ -170,6 +183,7 @@ async def reflect_node(state: AgentState, llm) -> dict:
     Returns:
         Dict with reflection result to merge into state.
     """
+    print(">>> reflect_node")
     from langchain_core.messages import HumanMessage, SystemMessage
 
     from mahtab.llm.prompts import build_reflection_prompt
@@ -187,6 +201,11 @@ async def reflect_node(state: AgentState, llm) -> dict:
 
     response = await llm.ainvoke(messages)
     result = _parse_reflection_response(response.content)
+    print(
+        "    reflection: is_complete=%s, reasoning=%s",
+        result.is_complete,
+        result.reasoning[:50] if result.reasoning else "",
+    )
 
     return {"reflection": result}
 
@@ -200,9 +219,10 @@ def should_execute(state: AgentState) -> str:
     Returns:
         "execute" if there are code blocks, "end" otherwise.
     """
-    if state.get("code_blocks"):
-        return "execute"
-    return "end"
+    has_code = bool(state.get("code_blocks"))
+    result = "execute" if has_code else "end"
+    print(">>> should_execute -> %s", result)
+    return result
 
 
 def should_continue(state: AgentState, max_turns: int = 5) -> str:
@@ -216,16 +236,20 @@ def should_continue(state: AgentState, max_turns: int = 5) -> str:
         "generate" to continue, "end" to finish.
     """
     reflection = state.get("reflection")
+    turn_count = state.get("turn_count", 0)
 
     # If reflection says complete, we're done
     if reflection and reflection.is_complete:
+        print(">>> should_continue -> end (task complete)")
         return "end"
 
     # If we've hit max turns, stop
-    if state.get("turn_count", 0) >= max_turns:
+    if turn_count >= max_turns:
+        print(">>> should_continue -> end (max turns %d reached)", max_turns)
         return "end"
 
     # Otherwise, continue
+    print(">>> should_continue -> generate (turn %d/%d)", turn_count, max_turns)
     return "generate"
 
 

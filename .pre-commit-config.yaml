@@ -28,3 +28,10 @@ repos:
         language: system
         types: [python]
         pass_filenames: true
+
+      - id: vulture
+        name: vulture dead code
+        entry: uv run vulture --min-confidence 75
+        language: system
+        types: [python]
+        pass_filenames: true
