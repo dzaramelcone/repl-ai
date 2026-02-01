@@ -64,10 +64,7 @@ class MahtabApp(App):
     """
 
     BINDINGS = [
-        ("f2", "new_session", "New Session"),
-        ("f4", "close_session", "Close Session"),
-        ("f6", "next_tab", "Next Tab"),
-        ("f5", "prev_tab", "Previous Tab"),
+        # Tab management bindings TBD - avoiding terminal conflicts for now
     ]
 
     def __init__(self):
@@ -96,6 +93,8 @@ class MahtabApp(App):
         # Wire up logging handlers for the initial session
         for session in self.sessions.values():
             self._wire_session_handlers(session)
+            # Focus the input
+            self.query_one(f"#input-{session.id}", TextArea).focus()
 
     def _wire_session_handlers(self, session: Session):
         """Wire logging handlers for a session's widgets."""
@@ -168,19 +167,31 @@ class MahtabApp(App):
         tabs = self.query_one("#sessions", TabbedContent)
         tabs.action_previous_tab()
 
-    async def on_key(self, event):
-        """Handle Ctrl+Enter to submit code."""
-        if event.key == "ctrl+enter":
-            # Find the active session's input
-            tabs = self.query_one("#sessions", TabbedContent)
-            active_tab_id = tabs.active
-            if active_tab_id and active_tab_id.startswith("tab-"):
-                session_id = active_tab_id[4:]  # Remove "tab-" prefix
-                if session_id in self.sessions:
-                    await self._submit_input(self.sessions[session_id])
-                    event.prevent_default()
+    def _get_active_session(self) -> Session | None:
+        """Get the currently active session."""
+        tabs = self.query_one("#sessions", TabbedContent)
+        active_tab_id = tabs.active
+        if active_tab_id and active_tab_id.startswith("tab-"):
+            session_id = active_tab_id[4:]  # Remove "tab-" prefix
+            return self.sessions.get(session_id)
+        return None
 
-    async def _submit_input(self, session: Session):
+    async def on_key(self, event):
+        """Handle input submission."""
+        session = self._get_active_session()
+        if not session:
+            return
+
+        if event.key == "cmd+shift+enter":
+            # Cmd+Shift+Enter -> execute as Python in REPL
+            await self._submit_to_repl(session)
+            event.prevent_default()
+        elif event.key == "cmd+enter":
+            # Cmd+Enter -> send to chat (ask Claude)
+            await self._submit_to_chat(session)
+            event.prevent_default()
+
+    async def _submit_to_repl(self, session: Session):
         """Execute code from the session's input area."""
         input_widget = self.query_one(f"#input-{session.id}", TextArea)
         code = input_widget.text.strip()
@@ -201,3 +212,16 @@ class MahtabApp(App):
                 exec(code, session.namespace)
         except Exception as e:
             session.log_user_repl.error(f"[red]{type(e).__name__}: {e}[/red]")
+
+    async def _submit_to_chat(self, session: Session):
+        """Send input to chat (Claude). Not yet implemented."""
+        input_widget = self.query_one(f"#input-{session.id}", TextArea)
+        prompt = input_widget.text.strip()
+        if not prompt:
+            return
+        input_widget.clear()
+
+        # Log the prompt
+        session.log_user_chat.info(f"You: {prompt}")
+        # TODO: Wire up Claude agent here
+        session.log_llm_chat.info("[dim]Claude integration coming soon...[/dim]")
