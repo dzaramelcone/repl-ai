@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 import time
 from enum import Enum, auto
@@ -13,6 +14,7 @@ from rich.spinner import Spinner
 
 from mahtab.llm import extract_usage
 from mahtab.ui.code_panel import CodePanel
+from mahtab.ui.xml_panel import XmlPanel
 
 
 class StreamState(Enum):
@@ -21,15 +23,13 @@ class StreamState(Enum):
     OUTSIDE = auto()
     IN_CHAT = auto()
     IN_REPL = auto()
+    IN_XML = auto()
 
 
 class StreamingHandler(BaseCallbackHandler):
     """Handles streaming output with XML tag parsing."""
 
-    # Capture real stdout at class load time, before any redirects
     _real_stdout = sys.stdout
-
-    # Tag patterns
     _OPEN_CHAT = "<assistant-chat>"
     _CLOSE_CHAT = "</assistant-chat>"
     _OPEN_REPL = "<assistant-repl-in>"
@@ -39,23 +39,19 @@ class StreamingHandler(BaseCallbackHandler):
         super().__init__()
         self.console = console
         self._char_interval = 1.0 / chars_per_second
-
-        # State machine
         self._state = StreamState.OUTSIDE
         self._buffer = ""
-
-        # UI state
         self._spinner: Live | None = None
         self._code_panel = CodePanel(console)
+        self._xml_panel = XmlPanel(console)
         self._first_token = True
         self._last_output_time: float = 0.0
         self.last_usage: dict = {}
-
-        # State dispatch table
         self._handlers = {
             StreamState.OUTSIDE: self._handle_outside,
             StreamState.IN_CHAT: self._handle_chat,
             StreamState.IN_REPL: self._handle_repl,
+            StreamState.IN_XML: self._handle_xml,
         }
 
     def _write(self, text: str) -> None:
@@ -91,8 +87,8 @@ class StreamingHandler(BaseCallbackHandler):
             self._spinner.stop()
             self._spinner = None
 
-    def _handle_outside(self) -> bool:
-        """Handle OUTSIDE state."""
+    def _try_known_tags(self) -> bool | None:
+        """Try to match known tags. Returns True/False if matched, None if not."""
         if self._buffer.startswith(self._OPEN_CHAT):
             self._buffer = self._buffer[len(self._OPEN_CHAT) :]
             self._state = StreamState.IN_CHAT
@@ -103,17 +99,38 @@ class StreamingHandler(BaseCallbackHandler):
             self._write("\n")
             self._code_panel.start()
             return True
-        # Check if buffer could be prefix of a known tag
         for tag in (self._OPEN_CHAT, self._OPEN_REPL):
             if tag.startswith(self._buffer):
                 return False
+        return None
+
+    def _try_generic_xml(self) -> bool | None:
+        """Try to match generic XML tag. Returns True/False if matched, None if not."""
+        xml_match = re.match(r"<([a-z_-]+)>", self._buffer)
+        if xml_match:
+            self._buffer = self._buffer[xml_match.end() :]
+            self._state = StreamState.IN_XML
+            self._write("\n")
+            self._xml_panel.start(xml_match.group(1))
+            return True
+        if re.match(r"<[a-z_-]*$", self._buffer):
+            return False
+        return None
+
+    def _handle_outside(self) -> bool:
+        """Handle OUTSIDE state."""
+        result = self._try_known_tags()
+        if result is not None:
+            return result
+        result = self._try_generic_xml()
+        if result is not None:
+            return result
         # Output unrecognized content up to next '<'
         next_lt = self._buffer.find("<", 1)
         if next_lt > 0:
             self._write_smooth(self._buffer[:next_lt])
             self._buffer = self._buffer[next_lt:]
             return True
-        # No '<' found - output buffer unless it ends with partial '<'
         if self._buffer.endswith("<"):
             self._write_smooth(self._buffer[:-1])
             self._buffer = "<"
@@ -161,6 +178,28 @@ class StreamingHandler(BaseCallbackHandler):
         self._code_panel.update()
         return False
 
+    def _handle_xml(self) -> bool:
+        """Handle IN_XML state for generic XML blocks."""
+        close_tag = f"</{self._xml_panel.tag}>"
+        if close_tag in self._buffer:
+            idx = self._buffer.find(close_tag)
+            self._xml_panel.append(self._buffer[:idx])
+            self._xml_panel.finish()
+            self._buffer = self._buffer[idx + len(close_tag) :]
+            self._state = StreamState.OUTSIDE
+            return True
+        if "</" in self._buffer:
+            idx = self._buffer.find("</")
+            if idx > 0:
+                self._xml_panel.append(self._buffer[:idx])
+                self._buffer = self._buffer[idx:]
+            self._xml_panel.update()
+            return False
+        self._xml_panel.append(self._buffer)
+        self._buffer = ""
+        self._xml_panel.update()
+        return False
+
     def process_token(self, token: str) -> None:
         """Process a streaming token."""
         if self._first_token:
@@ -178,6 +217,9 @@ class StreamingHandler(BaseCallbackHandler):
         elif self._state == StreamState.IN_REPL and self._code_panel.is_active:
             self._code_panel.append(self._buffer)
             self._code_panel.finish()
+        elif self._state == StreamState.IN_XML and self._xml_panel.is_active:
+            self._xml_panel.append(self._buffer)
+            self._xml_panel.finish()
         self._buffer = ""
         self._write("\n")
 
@@ -193,6 +235,7 @@ class StreamingHandler(BaseCallbackHandler):
         """Clean up any active UI elements."""
         self.stop_spinner()
         self._code_panel.cleanup()
+        self._xml_panel.cleanup()
 
     def on_llm_new_token(self, token: str, **_kwargs) -> None:
         """Called by LangChain when a new token is generated."""

@@ -167,20 +167,25 @@ def test_streaming_outputs_outside_content():
     assert "garbage before" in "".join(written)
 
 
-def test_streaming_outputs_unknown_tags_and_finds_known():
-    """Unknown tags like <thinking> are output, then known tags are handled."""
+def test_streaming_generic_xml_in_panel():
+    """Unknown tags like <thinking> are displayed in panels."""
+    from unittest.mock import MagicMock, patch
+
     handler = _make_handler()
     handler.reset()
     written = []
     handler._write_smooth = lambda text: written.append(text)
+    handler._write = lambda _: None
 
-    # Simulate <thinking>...</thinking><assistant-chat>Hello</assistant-chat>
-    handler.process_token("<thinking>some thoughts</thinking><assistant-chat>Hello</assistant-chat>")
+    with patch("mahtab.ui.xml_panel.Live") as mock_live:
+        mock_instance = MagicMock()
+        mock_live.return_value = mock_instance
+        handler.process_token("<thinking>some thoughts</thinking><assistant-chat>Hello</assistant-chat>")
 
     assert handler._state == StreamState.OUTSIDE
-    all_written = "".join(written)
-    assert "<thinking>some thoughts</thinking>" in all_written
-    assert "Hello" in all_written
+    assert "Hello" in "".join(written)
+    # The <thinking> content was shown in a panel, not raw output
+    mock_live.assert_called()  # Panel was created
 
 
 def test_flush_in_chat_state():

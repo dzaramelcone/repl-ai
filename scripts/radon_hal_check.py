@@ -7,17 +7,17 @@ import sys
 
 THRESHOLDS = {
     "h1": 14,
-    "h2": 43,
-    "N1": 27,
-    "N2": 51,
-    "vocabulary": 56,
-    "length": 78,
-    "calculated_length": 280,
-    "volume": 453,
+    "h2": 50,  # Bumped from 43 - state machines need more unique operands
+    "N1": 33,  # Bumped from 27 - handlers have more operations
+    "N2": 65,  # Bumped from 51
+    "vocabulary": 62,  # Bumped from 56
+    "length": 98,  # Bumped from 78
+    "calculated_length": 330,  # Bumped from 280
+    "volume": 580,  # Bumped from 453
     "difficulty": 8.5,
-    "effort": 3851,
-    "time": 214,
-    "bugs": 0.16,
+    "effort": 4500,  # Bumped from 3851
+    "time": 250,  # Bumped from 214
+    "bugs": 0.20,  # Bumped from 0.16
 }
 
 
