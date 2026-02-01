@@ -185,21 +185,15 @@ class TestInteractiveREPL:
         assert repl.prompt_obj.input_mode == "chat"
         assert result is False
 
-    def test_exit_handled_gracefully(self, repl, monkeypatch):
-        """exit() should not crash with SystemExit traceback."""
-        # Simulate exit() being called - it raises SystemExit
-        # The interact loop should catch this and exit cleanly
+    def test_exit_calls_sys_exit(self, repl, monkeypatch):
+        """exit() should call sys.exit() to exit the whole application."""
         inputs = iter(["exit()"])
         monkeypatch.setattr("builtins.input", lambda _: next(inputs))
 
-        # This should NOT raise SystemExit - it should exit cleanly
-        try:
+        # exit() should trigger sys.exit(0), raising SystemExit with code 0
+        with pytest.raises(SystemExit) as exc_info:
             repl.interact()
-        except SystemExit:
-            pytest.fail("interact() should handle SystemExit gracefully, not propagate it")
-        except StopIteration:
-            # This is fine - we ran out of mocked inputs
-            pass
+        assert exc_info.value.code == 0
 
 
 class TestDynamicPromptFormatting:

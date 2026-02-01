@@ -205,8 +205,8 @@ class InteractiveREPL(code.InteractiveConsole):
             except EOFError:
                 break
             except SystemExit:
-                # Handle exit() gracefully without traceback
-                break
+                # exit() should exit the whole application, not just the eval loop
+                sys.exit(0)
 
         if exitmsg:
             self.write(f"{exitmsg}\n")
