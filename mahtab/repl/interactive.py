@@ -20,12 +20,12 @@ from mahtab.ui.console import console
 from mahtab.ui.panels import print_banner, print_output_panel, print_usage_panel
 from mahtab.ui.streaming import StreamingHandler
 
-# ANSI codes for prompt
-NUM = "\033[38;5;117m"  # bright blue-ish
-DIM = "\033[38;5;242m"  # grey
-RESET = "\033[0m"
-CYAN = "\033[36m"
-GREEN = "\033[32m"
+# ANSI codes for prompt - wrapped in \001 \002 for readline length calculation
+NUM = "\001\033[38;5;117m\002"  # bright blue-ish
+DIM = "\001\033[38;5;242m\002"  # grey
+RESET = "\001\033[0m\002"
+CYAN = "\001\033[36m\002"
+GREEN = "\001\033[32m\002"
 
 
 def _approx_tokens(text: str) -> int:
