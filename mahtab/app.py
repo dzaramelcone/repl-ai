@@ -345,9 +345,13 @@ class MahtabApp(App):
                     classes="assistant-message",
                 )
                 chat_pane.mount(container)
+            else:
+                # Show that we got a response but it was all code
+                chat_pane.mount(Static("[dim]Claude executed code (see REPL pane)[/dim]", markup=True))
         except Exception as e:
             loading.remove()
             error_msg = Static(f"[bold]Claude:[/bold] [red]Error: {e}[/red]", classes="assistant-message", markup=True)
             chat_pane.mount(error_msg)
+            self.notify(f"Error: {e}", severity="error")
 
         chat_pane.scroll_end()
