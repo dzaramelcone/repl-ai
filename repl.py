@@ -711,6 +711,52 @@ def create(name: str, content: str = "") -> str:
     return f"OK: created {file_path}\n→ import {name}"
 
 
+def ed(content: str = "", path: str | None = None, suffix: str = ".py") -> str:
+    """
+    Edit text in $EDITOR, return the result.
+
+    Args:
+        content: Initial content to edit (ignored if path is provided)
+        path: If provided, edit this file directly instead of a temp file
+        suffix: File extension for temp file (default: .py for syntax highlighting)
+
+    Returns:
+        The edited content as a string.
+
+    Examples:
+        ask(ed())                    # Write prompt in vim, send to Claude
+        ask(ed(response))            # Edit Claude's response, send back
+        code = ed(code)              # Iterate on code
+        ed(path="foo.py")            # Edit existing file
+        ed(read("foo.py"))           # Edit file content without saving yet
+    """
+    import os
+    import subprocess
+    import tempfile
+
+    editor = os.environ.get("EDITOR", "vim")
+
+    if path:
+        # Edit existing file directly
+        file_path = Path(path).expanduser()
+        subprocess.call([editor, str(file_path)])
+        return file_path.read_text()
+    else:
+        # Use temp file
+        with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False) as f:
+            f.write(content)
+            temp_path = f.name
+
+        try:
+            subprocess.call([editor, temp_path])
+            with open(temp_path) as f:
+                result = f.read()
+        finally:
+            os.unlink(temp_path)
+
+        return result
+
+
 def load_claude_sessions(projects_path: str = "~/.claude/projects") -> str:
     """Load all JSONL files from Claude projects into one big context."""
     from pathlib import Path
@@ -949,6 +995,7 @@ ns.update(
         "rlm": rlm,
         "load_claude_sessions": load_claude_sessions,
         "create": create,
+        "ed": ed,
         "edit": edit,
         "read": read,
         "skill": skill,
@@ -966,6 +1013,7 @@ console.print(
         Text.from_markup("""[bold cyan]ask[/][dim](\"prompt\")[/]        [dim]→ ask Claude (streams response)[/]
 [bold cyan]clear[/][dim]()[/]             [dim]→ clear conversation history[/]
 
+[bold yellow]ed[/][dim]()[/]                 [dim]→ edit in $EDITOR, return text (try: ask(ed()))[/]
 [bold yellow]create[/][dim](name)[/]         [dim]→ create new module (e.g. "utils" or "foo.bar")[/]
 [bold yellow]read[/][dim](path)[/]           [dim]→ read file with line numbers[/]
 [bold yellow]edit[/][dim](path, old, new)[/] [dim]→ replace text in file[/]
