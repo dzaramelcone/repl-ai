@@ -119,6 +119,24 @@ def skill(name: str, args: str = "") -> str:
     return content
 
 
+# Text exploration tools (from RLM paper)
+def peek(text: str, n: int = 2000) -> str:
+    """Return first n characters of text."""
+    return text[:n]
+
+
+def grep(text: str, pattern: str) -> list[str]:
+    """Return lines matching regex pattern (case-insensitive)."""
+    import re
+    return [line for line in text.split('\n') if re.search(pattern, line, re.IGNORECASE)]
+
+
+def partition(text: str, n: int = 10) -> list[str]:
+    """Split text into n roughly equal chunks."""
+    chunk_size = max(1, len(text) // n)
+    return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
+
+
 def init(g=None, l=None):
     """Initialize with your namespace. Call as: init(globals(), locals())"""
     global _globals, _locals
@@ -165,13 +183,16 @@ File tools:
   read(path, start=1, end=None) -> str   # Read file with line numbers
   edit(path, old, new) -> str            # Replace old text with new text in file
 
-Large text exploration:
-  load_claude_sessions() -> str     # Load all ~/.claude/projects/*.jsonl into a string
-  rlm(query, context) -> str        # Recursive LLM search over large context
+Text exploration (for large strings):
+  peek(text, n=2000) -> str        # First n chars
+  grep(text, pattern) -> list[str] # Lines matching regex
+  partition(text, n=10) -> list[str] # Split into n chunks
+  rlm(query, context) -> str       # Recursive LLM search
 
 {skill_descriptions}
 
-Inside rlm, you have: peek(n), grep(pattern), partition(n), FINAL(answer)
+Other:
+  load_claude_sessions() -> str    # Load ~/.claude/projects/*.jsonl
 
 When you want to run code, output a fenced python block. The code will execute in the user's namespace and you'll see the output. You can run multiple code blocks in one response.
 

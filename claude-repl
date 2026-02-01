@@ -4,7 +4,7 @@ exec uv run python -i -c "
 import sys
 import re
 import readline
-from repl import ask_sync as ask, clear, init, console, bg, tasks, _bg_tasks, edit, read, load_claude_sessions, skill, record_input, _repl_activity, SKILLS_DIR
+from repl import ask_sync as ask, clear, init, console, bg, tasks, _bg_tasks, edit, read, load_claude_sessions, skill, record_input, _repl_activity, SKILLS_DIR, peek, grep, partition
 from rlm import rlm
 from rich.panel import Panel
 from rich.text import Text
@@ -85,7 +85,7 @@ sys.ps1 = DynamicPrompt()
 sys.ps2 = '\033[2m⋮\033[0m '
 
 ns = globals()
-ns.update({'ask': ask, 'clear': clear, 're': re, 'rlm': rlm, 'load_claude_sessions': load_claude_sessions, 'bg': bg, 'tasks': tasks, 'edit': edit, 'read': read, 'skill': skill})
+ns.update({'ask': ask, 'clear': clear, 're': re, 'rlm': rlm, 'load_claude_sessions': load_claude_sessions, 'bg': bg, 'tasks': tasks, 'edit': edit, 'read': read, 'skill': skill, 'peek': peek, 'grep': grep, 'partition': partition})
 init(ns, ns)
 
 console.print()
@@ -99,8 +99,10 @@ console.print(Panel(
 [bold yellow]edit[/][dim](path, old, new)[/] [dim]→ replace text in file[/]
 [bold yellow]skill[/][dim](name)[/]          [dim]→ invoke a skill from ~/.mahtab/skills/[/]
 
-[bold magenta]load_claude_sessions[/][dim]() → load ~/.claude/projects/*.jsonl[/]
-[bold magenta]rlm[/][dim](query, context)[/]    [dim]→ recursive LLM search[/]'''),
+[bold green]peek[/][dim](text, n)[/]        [dim]→ first n chars of text[/]
+[bold green]grep[/][dim](text, pattern)[/]  [dim]→ lines matching regex[/]
+[bold green]partition[/][dim](text, n)[/]   [dim]→ split text into n chunks[/]
+[bold green]rlm[/][dim](query, context)[/]  [dim]→ recursive LLM search[/]'''),
     title='[bold white]mahtab[/]',
     subtitle='[dim]Ctrl+C to cancel[/]',
     border_style='bright_black'
