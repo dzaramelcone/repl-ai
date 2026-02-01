@@ -14,7 +14,7 @@ from mahtab.tools.files import create_file, open_in_editor, read_file
 from mahtab.tools.skills import load_claude_sessions, load_skill
 from mahtab.tools.text import grep_raw, partition_raw, peek_raw
 from mahtab.ui.console import console
-from mahtab.ui.panels import print_banner, print_output_panel, print_usage_panel
+from mahtab.ui.panels import print_banner, print_usage_panel
 from mahtab.ui.streaming import StreamingHandler
 
 # ANSI codes for prompt
@@ -113,81 +113,18 @@ def run_repl(ns: dict | None = None) -> None:
     streaming_handler = StreamingHandler(console=console)
 
     # Create wrapper functions for the namespace
-    def ask(prompt: str = "", max_turns: int = 5) -> None:
+    def ask(prompt: str = "") -> None:
         """Ask Claude something. Claude can execute code in your namespace."""
+        if not prompt:
+            return
+
         try:
+            streaming_handler.reset()
 
-            async def run_ask():
-                nonlocal streaming_handler
-                from langchain_core.messages import HumanMessage, SystemMessage
+            async def run():
+                return await agent.ask(prompt, streaming_handler=streaming_handler)
 
-                from mahtab.core.executor import execute_code
-                from mahtab.llm.prompts import build_repl_system_prompt
-                from mahtab.tools.skills import load_skill_descriptions
-
-                system_prompt = build_repl_system_prompt(
-                    var_summary=session.summarize_namespace(),
-                    skills_description=load_skill_descriptions(session.skills_dir),
-                    repl_context=session.get_activity_context(),
-                    prior_session=session.load_last_session(),
-                )
-
-                session.add_user_message(prompt)
-
-                for _ in range(max_turns):
-                    messages = [SystemMessage(content=system_prompt), *session.messages]
-
-                    # Reset streaming handler state and start spinner
-                    streaming_handler.reset()
-                    streaming_handler.start_spinner()
-
-                    response_text = ""
-                    async for chunk in agent.llm.astream(messages):
-                        token = chunk.content
-                        if token:
-                            response_text += token
-                            streaming_handler.process_token(token)
-
-                        # Check for usage in response_metadata (LangChain's standard location)
-                        metadata = getattr(chunk, "response_metadata", {}) or {}
-                        usage = metadata.get("usage", {})
-                        if usage:
-                            session.usage.record(
-                                cost=metadata.get("total_cost_usd", 0),
-                                input_tokens=usage.get("input_tokens", 0),
-                                output_tokens=usage.get("output_tokens", 0),
-                                cache_read=usage.get("cache_read_input_tokens", 0),
-                                cache_create=usage.get("cache_creation_input_tokens", 0),
-                            )
-
-                    # Flush any remaining text and ensure spinner is stopped
-                    streaming_handler.flush()
-                    streaming_handler.stop_spinner()
-
-                    # Extract and execute code blocks
-                    code_blocks = re.findall(r"```python\n(.*?)```", response_text, re.DOTALL)
-
-                    if not code_blocks:
-                        session.add_assistant_message(response_text)
-                        session.save_last_session(prompt, response_text)
-                        return
-
-                    # Execute code blocks
-                    outputs = []
-                    for block in code_blocks:
-                        block = block.strip()
-                        output, is_error = execute_code(block, session)
-                        outputs.append(output)
-                        print_output_panel(output, is_error)
-
-                    session.add_assistant_message(response_text)
-
-                    exec_report = "\n\n".join(f"Code block {i + 1} output:\n{out}" for i, out in enumerate(outputs))
-                    session.messages.append(HumanMessage(content=f"<execution>\n{exec_report}\n</execution>"))
-
-                console.print(f"[yellow]⚠ Max turns ({max_turns}) reached.[/]")
-
-            asyncio.run(run_ask())
+            asyncio.run(run())
 
         except KeyboardInterrupt:
             streaming_handler.cleanup()
