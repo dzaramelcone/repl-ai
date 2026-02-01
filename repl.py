@@ -200,7 +200,7 @@ When you want to run code, output a fenced python block. The code will execute i
 
 When you're done and have a final answer, just respond with text (no code block).
 
-Keep responses concise."""
+Keep responses concise. Do NOT generate conversation transcripts or include "User:", "A:", "Assistant:" labels - just respond directly."""
 
     _history.append({"role": "user", "content": prompt})
 
