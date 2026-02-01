@@ -8,12 +8,20 @@ from rich.panel import Panel
 from rich.pretty import Pretty
 
 
-def _xml_to_dict(element: ET.Element) -> dict | str:
-    """Convert XML element to dict recursively."""
+def _truncate(text: str, max_len: int) -> str:
+    """Truncate text with ellipsis if too long."""
+    if len(text) <= max_len:
+        return text
+    return text[:max_len] + "…"
+
+
+def _xml_to_dict(element: ET.Element, max_len: int = 80) -> dict | str:
+    """Convert XML element to dict recursively, truncating long values."""
     children = list(element)
     if not children:
-        return element.text.strip() if element.text else ""
-    return {child.tag: _xml_to_dict(child) for child in children}
+        text = element.text.strip() if element.text else ""
+        return _truncate(text, max_len)
+    return {child.tag: _xml_to_dict(child, max_len) for child in children}
 
 
 class XmlPanel:
