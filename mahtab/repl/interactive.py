@@ -167,11 +167,10 @@ class InteractiveREPL(code.InteractiveConsole):
 
     def showsyntaxerror(self, filename: str | None = None) -> None:
         """Print syntax error using Rich and log it."""
-        import traceback
-
-        tb_text = "".join(traceback.format_exception(*sys.exc_info()))
-        self.log.info(tb_text, extra={"tag": "user-repl-out"})
-        console.print_exception(show_locals=False)
+        _, err, _ = sys.exc_info()
+        msg = f"{type(err).__name__}: {err}"
+        self.log.info(msg, extra={"tag": "user-repl-out"})
+        console.print(f"[red]{msg}[/]")
 
     def runcode(self, code) -> None:
         """Execute compiled code, intercepting SystemExit before base class prints it.
