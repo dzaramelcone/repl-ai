@@ -58,9 +58,7 @@ class SessionState(BaseModel):
 
     # Paths for persistence
     skills_dir: Path = Field(default_factory=lambda: Path("~/.mahtab/skills").expanduser())
-    last_session_file: Path = Field(
-        default_factory=lambda: Path("~/.mahtab/last_session.json").expanduser()
-    )
+    last_session_file: Path = Field(default_factory=lambda: Path("~/.mahtab/last_session.json").expanduser())
 
     def init_namespace(self, globals_dict: dict | None = None, locals_dict: dict | None = None) -> None:
         """Initialize with caller's namespace."""

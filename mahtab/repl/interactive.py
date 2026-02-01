@@ -182,9 +182,7 @@ def run_repl(ns: dict | None = None) -> None:
 
                     session.add_assistant_message(response_text)
 
-                    exec_report = "\n\n".join(
-                        f"Code block {i + 1} output:\n{out}" for i, out in enumerate(outputs)
-                    )
+                    exec_report = "\n\n".join(f"Code block {i + 1} output:\n{out}" for i, out in enumerate(outputs))
                     session.messages.append(HumanMessage(content=f"<execution>\n{exec_report}\n</execution>"))
 
                 console.print(f"[yellow]⚠ Max turns ({max_turns}) reached.[/]")
@@ -231,22 +229,24 @@ def run_repl(ns: dict | None = None) -> None:
         return load_skill.invoke({"name": name, "args": args})
 
     # Add functions to namespace
-    ns.update({
-        "ask": ask,
-        "clear": clear,
-        "usage": usage,
-        "ed": ed,
-        "read": read,
-        "edit": edit,
-        "create": create,
-        "skill": skill,
-        "peek": peek_raw,
-        "grep": grep_raw,
-        "partition": partition_raw,
-        "rlm": rlm,
-        "load_claude_sessions": load_claude_sessions,
-        "re": re,
-    })
+    ns.update(
+        {
+            "ask": ask,
+            "clear": clear,
+            "usage": usage,
+            "ed": ed,
+            "read": read,
+            "edit": edit,
+            "create": create,
+            "skill": skill,
+            "peek": peek_raw,
+            "grep": grep_raw,
+            "partition": partition_raw,
+            "rlm": rlm,
+            "load_claude_sessions": load_claude_sessions,
+            "re": re,
+        }
+    )
 
     # Set up dynamic prompt
     sys.ps1 = DynamicPrompt(session, ns)

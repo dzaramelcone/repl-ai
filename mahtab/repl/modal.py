@@ -157,11 +157,13 @@ def run_modal_repl(ns: dict | None = None, console: Console | None = None) -> No
         session.clear_history()
         console.print("[dim]History cleared.[/]")
 
-    ns.update({
-        "clear": clear,
-        "rlm": rlm,
-        "load_claude_sessions": load_claude_sessions,
-    })
+    ns.update(
+        {
+            "clear": clear,
+            "rlm": rlm,
+            "load_claude_sessions": load_claude_sessions,
+        }
+    )
 
     # Print banner
     print_modal_banner(console)

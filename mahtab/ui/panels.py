@@ -72,11 +72,13 @@ def print_output_panel(
     if title is None:
         title = "Error" if is_error else "Output"
 
-    console.print(Panel(
-        output,
-        title=f"[bold {style}]{title}[/]",
-        border_style=style,
-    ))
+    console.print(
+        Panel(
+            output,
+            title=f"[bold {style}]{title}[/]",
+            border_style=style,
+        )
+    )
 
 
 def print_final_panel(
@@ -100,11 +102,13 @@ def print_final_panel(
     if len(result) > max_chars:
         truncated += "..."
 
-    console.print(Panel(
-        truncated,
-        title=f"[green]FINAL (depth={depth})[/]",
-        border_style="green",
-    ))
+    console.print(
+        Panel(
+            truncated,
+            title=f"[green]FINAL (depth={depth})[/]",
+            border_style="green",
+        )
+    )
 
 
 def print_banner(console: Console | None = None) -> None:
