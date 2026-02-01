@@ -14,7 +14,7 @@ class MockLLM:
         self.responses = responses
         self.call_count = 0
 
-    async def ainvoke(self, messages, config=None):
+    async def ainvoke(self, _messages, _config=None):
         response = self.responses[self.call_count % len(self.responses)]
         self.call_count += 1
         return AIMessage(content=response)
@@ -23,7 +23,7 @@ class MockLLM:
 @pytest.mark.asyncio
 async def test_graph_text_only_response():
     """Test that text-only response goes directly to END."""
-    llm = MockLLM(["This is just text, no code."])
+    llm = MockLLM(["<assistant-chat>This is just text, no code.</assistant-chat>"])
     graph = build_agent_graph(llm=llm, max_turns=5)
 
     initial_state: AgentState = {
@@ -36,7 +36,7 @@ async def test_graph_text_only_response():
 
     result = await graph.ainvoke(initial_state)
 
-    assert result["current_response"] == "This is just text, no code."
+    assert result["current_response"] == "<assistant-chat>This is just text, no code.</assistant-chat>"
     assert result["code_blocks"] == []
     assert result["turn_count"] == 1
 
@@ -46,7 +46,7 @@ async def test_graph_code_then_complete():
     """Test code execution followed by reflection saying complete."""
     llm = MockLLM(
         [
-            "Here's the code:\n```python\nx = 42\nprint(x)\n```",
+            "<assistant-chat>Here's the code:</assistant-chat><assistant-repl-in>x = 42\nprint(x)</assistant-repl-in>",
             '{"is_complete": true, "reasoning": "Variable set and printed", "next_action": null}',
         ]
     )
@@ -73,9 +73,9 @@ async def test_graph_multi_turn():
     """Test reflection triggering another generation."""
     llm = MockLLM(
         [
-            "First:\n```python\nx = 1\n```",
+            "<assistant-chat>First:</assistant-chat><assistant-repl-in>x = 1</assistant-repl-in>",
             '{"is_complete": false, "reasoning": "Need to also print", "next_action": "Print x"}',
-            "Now print:\n```python\nprint(x)\n```",
+            "<assistant-chat>Now print:</assistant-chat><assistant-repl-in>print(x)</assistant-repl-in>",
             '{"is_complete": true, "reasoning": "Done", "next_action": null}',
         ]
     )
@@ -103,7 +103,7 @@ async def test_graph_max_turns_limit():
     # LLM always says incomplete
     llm = MockLLM(
         [
-            "```python\nx = 1\n```",
+            "<assistant-repl-in>x = 1</assistant-repl-in>",
             '{"is_complete": false, "reasoning": "Never done", "next_action": "Keep going"}',
         ]
     )
