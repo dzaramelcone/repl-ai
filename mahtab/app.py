@@ -88,12 +88,13 @@ class MahtabApp(App):
     }
 
     .user-message {
-        background: $surface;
+        border: solid green;
         padding: 1;
         margin: 1 0;
     }
 
     .assistant-message {
+        border: solid cyan;
         padding: 1;
         margin: 1 0;
     }
@@ -214,12 +215,8 @@ class MahtabApp(App):
         if not session:
             return
 
-        if event.key == "ctrl+shift+enter":
-            # Ctrl+Shift+Enter -> execute as Python in REPL
-            await self._submit_to_repl(session)
-            event.prevent_default()
-        elif event.key == "ctrl+enter":
-            # Ctrl+Enter -> send to chat (ask Claude)
+        if event.key == "enter":
+            # Enter -> send to chat
             await self._submit_to_chat(session)
             event.prevent_default()
 
@@ -279,11 +276,13 @@ class MahtabApp(App):
             loading.remove()
             text_only = strip_code_blocks(response)
             if text_only:
-                assistant_msg = Markdown(text_only, classes="assistant-message")
-                chat_pane.mount(assistant_msg)
+                container = Vertical(classes="assistant-message")
+                container.mount(Static("[bold]Claude:[/bold]", markup=True))
+                container.mount(Markdown(text_only))
+                chat_pane.mount(container)
         except Exception as e:
             loading.remove()
-            error_msg = Static(f"[red]Error: {e}[/red]", classes="assistant-message", markup=True)
+            error_msg = Static(f"[bold]Claude:[/bold] [red]Error: {e}[/red]", classes="assistant-message", markup=True)
             chat_pane.mount(error_msg)
 
         chat_pane.scroll_end()
