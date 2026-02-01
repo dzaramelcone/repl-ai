@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Write|Edit|Glob|Grep|Task|WebFetch|WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'This tool is not available. You are in a Python REPL - use the Python functions instead: read(path), edit(path, old, new), peek(text), grep(text, pattern), partition(text, n), rlm(query, context)' >&2; exit 2"
+          }
+        ]
+      }
+    ]
+  }
+}

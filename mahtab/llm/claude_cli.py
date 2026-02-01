@@ -3,6 +3,7 @@
 import asyncio
 import json
 from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
 from typing import Any
 
 from langchain_core.callbacks import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
@@ -10,6 +11,10 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from pydantic import Field
+
+# Load REPL settings from .claude/settings.json
+_SETTINGS_PATH = Path(__file__).parent.parent / ".claude" / "settings.json"
+_REPL_SETTINGS = _SETTINGS_PATH.read_text() if _SETTINGS_PATH.exists() else ""
 
 
 class ChatClaudeCLI(BaseChatModel):
@@ -124,6 +129,9 @@ class ChatClaudeCLI(BaseChatModel):
 
         cmd.extend(["--setting-sources", self.setting_sources])
 
+        if _REPL_SETTINGS:
+            cmd.extend(["--settings", _REPL_SETTINGS])
+
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -187,6 +195,9 @@ class ChatClaudeCLI(BaseChatModel):
             cmd.extend(["--system-prompt", system])
 
         cmd.extend(["--setting-sources", self.setting_sources])
+
+        if _REPL_SETTINGS:
+            cmd.extend(["--settings", _REPL_SETTINGS])
 
         proc = await asyncio.create_subprocess_exec(
             *cmd,
