@@ -107,7 +107,7 @@ class StreamingHandler(BaseCallbackHandler):
             self._buffer = self._buffer[len(self._OPEN_REPL) :]
             self._state = StreamState.IN_REPL
             self._write("\n")
-            self._code_panel.start()
+            self._code_panel.start(title="REPL", color="magenta")
             return True
         for tag in (self._OPEN_CHAT, self._OPEN_REPL):
             if tag.startswith(self._buffer):

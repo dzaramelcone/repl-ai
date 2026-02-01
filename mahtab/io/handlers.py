@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Protocol
 
+from rich.markdown import Markdown
 from rich.panel import Panel
 
 from mahtab.io.formatters import BytesFormatter, RichFormatter, XMLFormatter
@@ -67,11 +68,8 @@ class DisplayHandler(logging.Handler):
                 # Skip - already shown during streaming / on_execution callback
                 pass
             case "user-chat":
-                panel = Panel(
-                    record.getMessage(),
-                    title="[bold green]You[/]",
-                    border_style="green",
-                )
+                md = Markdown(record.getMessage())
+                panel = Panel(md, title="[bold green]You[/]", border_style="green")
                 self.console.print(panel)
             case _:
                 self.console.print(self.format(record))

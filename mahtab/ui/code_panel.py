@@ -19,6 +19,8 @@ class CodePanel:
         self._live: Live | None = None
         self._buffer = ""
         self._language = "python"
+        self._title: str | None = None
+        self._color = "cyan"
         self._last_update_time: float = 0.0
 
     def _make_panel(self, code: str, done: bool) -> Panel:
@@ -30,23 +32,23 @@ class CodePanel:
             line_numbers=True,
             indent_guides=True,
         )
-        title = self._language if self._language != "python" else "Code"
+        title = self._title or (self._language if self._language != "python" else "Code")
+        color = self._color
         if done:
-            return Panel(
-                syntax,
-                title=f"[bold cyan]{title}[/]",
-                border_style="cyan",
-            )
-        return Panel(
-            syntax,
-            title=f"[dim cyan]{title}...[/]",
-            border_style="dim",
-        )
+            return Panel(syntax, title=f"[bold {color}]{title}[/]", border_style=color)
+        return Panel(syntax, title=f"[dim {color}]{title}...[/]", border_style="dim")
 
-    def start(self, language: str = "python") -> None:
+    def start(
+        self,
+        language: str = "python",
+        title: str | None = None,
+        color: str = "cyan",
+    ) -> None:
         """Start the live code panel."""
         self._buffer = ""
         self._language = language
+        self._title = title
+        self._color = color
         self._live = Live(
             self._make_panel("", done=False),
             console=self.console,
