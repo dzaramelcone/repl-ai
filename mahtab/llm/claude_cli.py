@@ -190,6 +190,7 @@ class ChatClaudeCLI(BaseChatModel):
             self.model,
             "--output-format",
             "stream-json",
+            "--include-partial-messages",
             "--verbose",
         ]
 
