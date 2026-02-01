@@ -2,27 +2,64 @@
 
 from __future__ import annotations
 
+import logging
+
 from textual.app import App
-from textual.widgets import Footer, Header, TabbedContent, TabPane
+from textual.containers import Horizontal, Vertical
+from textual.widgets import Footer, Header, RichLog, TabbedContent, TabPane, TextArea
 
 from mahtab.session import Session
 from mahtab.store import Store
-from mahtab.ui.repl_widget import REPLWidget
+from mahtab.ui.handlers import StoreHandler
+
+
+class RichLogHandler(logging.Handler):
+    """Sends log records to a RichLog widget."""
+
+    def __init__(self, widget: RichLog):
+        super().__init__()
+        self.widget = widget
+
+    def emit(self, record: logging.LogRecord) -> None:
+        msg = self.format(record)
+        self.widget.write(msg)
 
 
 class MahtabApp(App):
     """Main app. Manages sessions as tabs, owns the shared Store."""
 
     CSS = """
+    Screen {
+        layout: vertical;
+    }
+
     #sessions {
+        height: 1fr;
+    }
+
+    .session-content {
         height: 1fr;
         width: 100%;
     }
 
-    TabPane {
-        height: 100%;
+    .session-content Horizontal {
+        height: 1fr;
         width: 100%;
-        padding: 0;
+    }
+
+    .chat-pane, .repl-pane {
+        width: 1fr;
+        height: 100%;
+        border: solid $primary;
+    }
+
+    .repl-pane {
+        border: solid $secondary;
+    }
+
+    .input-area {
+        height: 5;
+        border: solid $accent;
     }
     """
 
@@ -45,8 +82,47 @@ class MahtabApp(App):
         self.sessions[session.id] = session
         with TabbedContent(id="sessions"):
             with TabPane(f"Session {session.id}", id=f"tab-{session.id}"):
-                yield REPLWidget(session)
+                yield Vertical(
+                    Horizontal(
+                        RichLog(id=f"chat-{session.id}", classes="chat-pane", wrap=True, markup=True),
+                        RichLog(id=f"repl-{session.id}", classes="repl-pane", wrap=True, markup=True),
+                    ),
+                    TextArea(id=f"input-{session.id}", classes="input-area", language="python"),
+                    classes="session-content",
+                )
         yield Footer()
+
+    def on_mount(self):
+        # Wire up logging handlers for the initial session
+        for session in self.sessions.values():
+            self._wire_session_handlers(session)
+
+    def _wire_session_handlers(self, session: Session):
+        """Wire logging handlers for a session's widgets."""
+        chat = self.query_one(f"#chat-{session.id}", RichLog)
+        repl = self.query_one(f"#repl-{session.id}", RichLog)
+
+        # Chat pane gets user and LLM chat
+        chat_handler = RichLogHandler(chat)
+        chat_handler.setFormatter(logging.Formatter("%(message)s"))
+        session.log_user_chat.addHandler(chat_handler)
+        session.log_llm_chat.addHandler(chat_handler)
+        session.log_user_chat.setLevel(logging.INFO)
+        session.log_llm_chat.setLevel(logging.INFO)
+
+        # REPL pane gets user and LLM repl
+        repl_handler = RichLogHandler(repl)
+        repl_handler.setFormatter(logging.Formatter("%(message)s"))
+        session.log_user_repl.addHandler(repl_handler)
+        session.log_llm_repl.addHandler(repl_handler)
+        session.log_user_repl.setLevel(logging.INFO)
+        session.log_llm_repl.setLevel(logging.INFO)
+
+        # Store gets everything
+        store_handler = StoreHandler(self.store)
+        store_handler.setFormatter(logging.Formatter("[%(name)s] %(message)s"))
+        for logger in [session.log_user_chat, session.log_llm_chat, session.log_user_repl, session.log_llm_repl]:
+            logger.addHandler(store_handler)
 
     def spawn_session(
         self,
@@ -58,8 +134,21 @@ class MahtabApp(App):
 
         tabs = self.query_one("#sessions", TabbedContent)
         label = f"↳ {session.id}" if parent else f"Session {session.id}"
-        pane = TabPane(label, REPLWidget(session), id=f"tab-{session.id}")
+
+        # Create inline widgets (custom Widget classes don't work in TabPane)
+        content = Vertical(
+            Horizontal(
+                RichLog(id=f"chat-{session.id}", classes="chat-pane", wrap=True, markup=True),
+                RichLog(id=f"repl-{session.id}", classes="repl-pane", wrap=True, markup=True),
+            ),
+            TextArea(id=f"input-{session.id}", classes="input-area", language="python"),
+            classes="session-content",
+        )
+        pane = TabPane(label, content, id=f"tab-{session.id}")
         tabs.add_pane(pane)
+
+        # Wire handlers after mount
+        self.call_after_refresh(lambda: self._wire_session_handlers(session))
 
         return session
 
@@ -78,3 +167,37 @@ class MahtabApp(App):
     def action_prev_tab(self):
         tabs = self.query_one("#sessions", TabbedContent)
         tabs.action_previous_tab()
+
+    async def on_key(self, event):
+        """Handle Ctrl+Enter to submit code."""
+        if event.key == "ctrl+enter":
+            # Find the active session's input
+            tabs = self.query_one("#sessions", TabbedContent)
+            active_tab_id = tabs.active
+            if active_tab_id and active_tab_id.startswith("tab-"):
+                session_id = active_tab_id[4:]  # Remove "tab-" prefix
+                if session_id in self.sessions:
+                    await self._submit_input(self.sessions[session_id])
+                    event.prevent_default()
+
+    async def _submit_input(self, session: Session):
+        """Execute code from the session's input area."""
+        input_widget = self.query_one(f"#input-{session.id}", TextArea)
+        code = input_widget.text.strip()
+        if not code:
+            return
+        input_widget.clear()
+
+        # Log the input
+        session.log_user_repl.info(f">>> {code}")
+
+        # Execute
+        try:
+            try:
+                result = eval(code, session.namespace)
+                if result is not None:
+                    session.log_user_repl.info(repr(result))
+            except SyntaxError:
+                exec(code, session.namespace)
+        except Exception as e:
+            session.log_user_repl.error(f"[red]{type(e).__name__}: {e}[/red]")
