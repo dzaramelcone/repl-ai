@@ -19,6 +19,7 @@ from mahtab.ui.buffer_parser import (
     has_partial_backticks,
 )
 from mahtab.ui.code_panel import CodePanel
+from mahtab.ui.console import format_elapsed
 from mahtab.ui.markdown_panel import MarkdownPanel
 from mahtab.ui.xml_panel import XmlPanel
 
@@ -49,6 +50,7 @@ class StreamingHandler(BaseCallbackHandler):
         self._state = StreamState.OUTSIDE
         self._buffer = ""
         self._spinner: Live | None = None
+        self._spinner_start_time: float = 0.0
         self._code_panel = CodePanel(console)
         self._xml_panel = XmlPanel(console)
         self._chat_panel = MarkdownPanel(console)
@@ -89,13 +91,16 @@ class StreamingHandler(BaseCallbackHandler):
                 refresh_per_second=10,
             )
             self._spinner.start()
+            self._spinner_start_time = time.time()
         self._first_token = True
 
     def stop_spinner(self) -> None:
-        """Stop the spinner."""
+        """Stop the spinner and show elapsed time."""
         if self._spinner:
+            elapsed = time.time() - self._spinner_start_time
             self._spinner.stop()
             self._spinner = None
+            self.console.print(f"[dim]thought for {format_elapsed(elapsed)}[/]")
 
     def _try_known_tags(self) -> bool | None:
         """Try to match known tags. Returns True/False if matched, None if not."""
