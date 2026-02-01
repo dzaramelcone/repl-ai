@@ -233,7 +233,7 @@ Keep responses concise."""
             f"Code block {i+1} output:\n{out}"
             for i, out in enumerate(outputs)
         )
-        _history.append({"role": "user", "content": f"[Execution results]\n{exec_report}"})
+        _history.append({"role": "user", "content": f"<execution>\n{exec_report}\n</execution>"})
 
     console.print(f"[yellow]⚠ Max turns ({max_turns}) reached. Use ask() again to continue.[/]")
     return "(max turns reached)"
@@ -325,9 +325,9 @@ async def _call_claude_stream(system: str, messages: list) -> str:
         role = msg["role"]
         content = msg["content"]
         if role == "user":
-            prompt_parts.append(f"User: {content}")
+            prompt_parts.append(f"[USER]\n{content}")
         else:
-            prompt_parts.append(f"Assistant: {content}")
+            prompt_parts.append(f"[ASSISTANT]\n{content}")
 
     full_prompt = "\n\n".join(prompt_parts)
 
