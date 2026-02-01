@@ -14,6 +14,7 @@ from mahtab.core.state import SessionState
 from mahtab.llm.claude_cli import ChatClaudeCLI
 from mahtab.llm.prompts import build_repl_system_prompt
 from mahtab.tools.skills import load_skill_descriptions
+from mahtab.ui import StreamingHandler
 
 
 class REPLAgent(BaseModel):
@@ -85,7 +86,7 @@ class REPLAgent(BaseModel):
         }
 
         # Run the graph
-        callbacks = [streaming_handler] if streaming_handler else None
+        callbacks = [streaming_handler or StreamingHandler()]
         result = await self._graph.ainvoke(initial_state, config={"callbacks": callbacks})
 
         # Update session with final messages
@@ -116,7 +117,7 @@ class REPLAgent(BaseModel):
         loop = asyncio.new_event_loop()
         try:
             return loop.run_until_complete(
-                self.ask(prompt, streaming_handler=streaming_handler, on_execution=on_execution)
+                self.ask(prompt, streaming_handler=streaming_handler or StreamingHandler(), on_execution=on_execution)
             )
         finally:
             loop.close()
@@ -143,8 +144,7 @@ def create_repl_agent(
     Returns:
         Configured REPLAgent instance.
     """
-    if session is None:
-        session = SessionState()
+    session = session or SessionState()
 
     llm = ChatClaudeCLI(model=model)
 
