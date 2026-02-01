@@ -23,6 +23,7 @@ NUM = "\033[38;5;117m"  # bright blue-ish
 DIM = "\033[38;5;242m"  # grey
 RESET = "\033[0m"
 CYAN = "\033[36m"
+GREEN = "\033[32m"
 
 
 def _approx_tokens(text: str) -> int:
@@ -48,6 +49,11 @@ class DynamicPrompt:
         self.session = session
         self.ns = ns
         self._last_history_len = readline.get_current_history_length()
+        self.input_mode = "repl"
+
+    def toggle_mode(self) -> None:
+        """Toggle between REPL and CHAT modes."""
+        self.input_mode = "chat" if self.input_mode == "repl" else "repl"
 
     def __str__(self) -> str:
         # Capture any new readline history entries (user input)
@@ -84,7 +90,11 @@ class DynamicPrompt:
             parts.append(f"{DIM}${NUM}{cost:.2f}{RESET}")
 
         info = " ".join(parts)
-        return f"{DIM}{info}{RESET} {CYAN}◈{RESET} " if info else f"{CYAN}◈{RESET} "
+        if self.input_mode == "chat":
+            symbol = f"{GREEN}◇{RESET}"
+        else:
+            symbol = f"{CYAN}◈{RESET}"
+        return f"{DIM}{info}{RESET} {symbol} " if info else f"{symbol} "
 
 
 def run_repl(ns: dict) -> None:
