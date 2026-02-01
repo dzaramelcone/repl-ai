@@ -49,17 +49,13 @@ class REPLAgent(BaseModel):
     async def ask(
         self,
         prompt: str,
-        on_token: callable | None = None,
-        on_code_block: callable | None = None,
-        on_execution: callable | None = None,
+        streaming_handler=None,
     ) -> str:
         """Send a prompt to Claude and handle the conversation.
 
         Args:
             prompt: The user's prompt.
-            on_token: Callback for each token streamed (NOT SUPPORTED in graph mode yet).
-            on_code_block: Callback when a code block is detected (NOT SUPPORTED yet).
-            on_execution: Callback with execution results (NOT SUPPORTED yet).
+            streaming_handler: Optional callback handler for streaming tokens.
 
         Returns:
             The final text response from Claude.
@@ -86,7 +82,8 @@ class REPLAgent(BaseModel):
         }
 
         # Run the graph
-        result = await self._graph.ainvoke(initial_state)
+        callbacks = [streaming_handler] if streaming_handler else None
+        result = await self._graph.ainvoke(initial_state, config={"callbacks": callbacks})
 
         # Update session with final messages
         final_response = result.get("current_response", "")
@@ -98,17 +95,13 @@ class REPLAgent(BaseModel):
     def ask_sync(
         self,
         prompt: str,
-        on_token: callable | None = None,
-        on_code_block: callable | None = None,
-        on_execution: callable | None = None,
+        streaming_handler=None,
     ) -> str:
         """Synchronous version of ask().
 
         Args:
             prompt: The user's prompt.
-            on_token: Callback for each token streamed.
-            on_code_block: Callback when a code block is detected.
-            on_execution: Callback with execution results.
+            streaming_handler: Optional callback handler for streaming tokens.
 
         Returns:
             The final text response from Claude.
@@ -117,7 +110,7 @@ class REPLAgent(BaseModel):
 
         loop = asyncio.new_event_loop()
         try:
-            return loop.run_until_complete(self.ask(prompt, on_token, on_code_block, on_execution))
+            return loop.run_until_complete(self.ask(prompt, streaming_handler=streaming_handler))
         finally:
             loop.close()
 

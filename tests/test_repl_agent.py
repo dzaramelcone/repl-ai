@@ -115,3 +115,30 @@ def test_repl_agent_ask_sync():
         result = agent.ask_sync("sync test")
 
     assert result == "Sync response!"
+
+
+@pytest.mark.asyncio
+async def test_ask_accepts_streaming_handler():
+    """ask() should accept and pass streaming_handler as callback."""
+    from mahtab.ui.streaming import StreamingHandler
+
+    session = SessionState()
+    agent = REPLAgent(session=session)
+
+    mock_graph = AsyncMock()
+    mock_graph.ainvoke.return_value = {
+        "current_response": "Hello!",
+        "code_blocks": [],
+        "turn_count": 1,
+        "messages": session.messages,
+    }
+
+    handler = StreamingHandler()
+
+    with patch.object(agent, "_graph", mock_graph):
+        await agent.ask("test prompt", streaming_handler=handler)
+
+    # Verify graph.ainvoke was called with callbacks in config
+    call_kwargs = mock_graph.ainvoke.call_args
+    assert "config" in call_kwargs.kwargs
+    assert handler in call_kwargs.kwargs["config"]["callbacks"]
