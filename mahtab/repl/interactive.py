@@ -73,9 +73,10 @@ def _format_tokens(n: int) -> str:
 class DynamicPrompt:
     """Dynamic prompt that shows memory, context, and cost info."""
 
-    def __init__(self, session: SessionState, ns: dict):
+    def __init__(self, session: SessionState, ns: dict, log):
         self.session = session
         self.ns = ns
+        self.log = log
         self._last_history_len = readline.get_current_history_length()
         self.input_mode = "repl"
 
@@ -90,7 +91,7 @@ class DynamicPrompt:
             self._last_history_len += 1
             item = readline.get_history_item(self._last_history_len)
             if item and not item.startswith("ask("):
-                self.session.record_activity(f"<user-repl-in>{item}</user-repl-in>")
+                self.log.info(item, extra={"tag": "user-repl-in"})
 
         parts = []
 
@@ -243,7 +244,12 @@ def run_repl(ns: dict) -> None:
     store = MemoryStore()
     log, prompt_handler = setup_logging(store)
 
-    agent = create_repl_agent(session=session, model="claude-haiku-4-5-20251001", max_turns=5)
+    agent = create_repl_agent(
+        session=session,
+        prompt_handler=prompt_handler,
+        model="claude-haiku-4-5-20251001",
+        max_turns=5,
+    )
     streaming_handler = StreamingHandler(console=console, chars_per_second=200.0)
 
     # Create wrapper functions for the namespace
@@ -273,7 +279,7 @@ def run_repl(ns: dict) -> None:
             streaming_handler.cleanup()
             sys.stdout.write("\n\033[33m[cancelled]\033[0m\n")
             sys.stdout.flush()
-            session.clear_activity()
+            prompt_handler.clear()
             print("\033[0m", end="", flush=True)
             return
 
@@ -287,7 +293,7 @@ def run_repl(ns: dict) -> None:
             cache_create=usage["cache_creation_input_tokens"],
         )
 
-        session.clear_activity()
+        prompt_handler.clear()
         print("\033[0m", end="", flush=True)
 
     def clear() -> None:
@@ -330,8 +336,8 @@ def run_repl(ns: dict) -> None:
         from mahtab.io import TAGS
 
         if tag not in TAGS:
-            console.print(f"[red]Unknown tag:[/] {tag}")
-            console.print(f"[dim]Valid tags:[/] {', '.join(sorted(TAGS))}")
+            print(f"Unknown tag: {tag}")
+            print(f"Valid tags: {', '.join(sorted(TAGS))}")
             return
 
         # Parse the store bytes to find matching records
@@ -348,20 +354,19 @@ def run_repl(ns: dict) -> None:
             close_pos = data.find(close_tag, open_pos)
             if close_pos == -1:
                 break
-            # Extract content between tags
-            content_start = open_pos + len(open_tag)
-            content = data[content_start:close_pos]
-            matches.append(content)
+            # Extract full XML including tags
+            full_record = data[open_pos : close_pos + len(close_tag)]
+            matches.append(full_record)
             start = close_pos + len(close_tag)
 
         if not matches:
-            console.print(f"[dim]No records found with tag:[/] {tag}")
+            print(f"No records found with tag: {tag}")
             return
 
-        console.print(f"[bold]Found {len(matches)} record(s) with tag [cyan]{tag}[/]:[/]")
-        for i, content in enumerate(matches, 1):
-            console.print(f"\n[dim]── record {i} ──[/]")
-            console.print(content)
+        print(f"Found {len(matches)} record(s) with tag {tag}:")
+        for i, record in enumerate(matches, 1):
+            print(f"\n── record {i} ──")
+            print(record)
 
     # Add functions to namespace
     ns.update(
@@ -385,7 +390,7 @@ def run_repl(ns: dict) -> None:
     )
 
     # Set up prompts
-    prompt_obj = DynamicPrompt(session, ns)
+    prompt_obj = DynamicPrompt(session, ns, log)
     sys.ps1 = prompt_obj
     sys.ps2 = "\033[2m⋮\033[0m "
 

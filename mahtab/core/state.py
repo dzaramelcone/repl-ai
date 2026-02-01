@@ -42,7 +42,6 @@ class SessionState(BaseModel):
     Replaces the global variables from the original repl.py:
     - _globals, _locals -> globals_ns, locals_ns
     - _history -> messages
-    - _repl_activity -> repl_activity
     - _usage_stats -> usage
     """
 
@@ -51,7 +50,6 @@ class SessionState(BaseModel):
     globals_ns: dict[str, Any] = Field(default_factory=dict)
     locals_ns: dict[str, Any] = Field(default_factory=dict)
     messages: list[BaseMessage] = Field(default_factory=list)
-    repl_activity: list[str] = Field(default_factory=list)
     usage: UsageStats = Field(default_factory=UsageStats)
 
     # Paths for persistence
@@ -77,23 +75,6 @@ class SessionState(BaseModel):
     def clear_history(self) -> None:
         """Clear conversation history."""
         self.messages.clear()
-
-    def record_activity(self, activity: str) -> None:
-        """Record REPL activity for context."""
-        self.repl_activity.append(activity)
-
-    def clear_activity(self) -> None:
-        """Clear REPL activity buffer."""
-        self.repl_activity.clear()
-
-    def get_activity_context(self, max_chars: int) -> str:
-        """Get recent REPL activity, truncated to max_chars."""
-        if not self.repl_activity:
-            return ""
-        text = "\n".join(self.repl_activity)
-        if len(text) > max_chars:
-            text = "...\n" + text[-max_chars:]
-        return text
 
     def save_last_session(self, user_msg: str, assistant_msg: str) -> None:
         """Save last exchange for next session."""

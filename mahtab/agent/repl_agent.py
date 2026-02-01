@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from mahtab.agent.graph import AgentState, build_agent_graph
 from mahtab.core.state import SessionState
+from mahtab.io.handlers import PromptHandler
 from mahtab.llm.claude_cli import ChatClaudeCLI
 from mahtab.llm.prompts import build_repl_system_prompt
 from mahtab.tools.skills import load_skill_descriptions
@@ -27,6 +28,7 @@ class REPLAgent(BaseModel):
 
     Attributes:
         session: The session state containing namespace and history.
+        prompt_handler: Handler that accumulates logged messages for context.
         llm: The language model to use (ChatClaudeCLI by default).
         max_turns: Maximum number of turns in the agentic loop.
     """
@@ -34,6 +36,7 @@ class REPLAgent(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     session: SessionState
+    prompt_handler: PromptHandler
     llm: BaseChatModel = Field(default_factory=ChatClaudeCLI)
     max_turns: int = 5
 
@@ -63,7 +66,7 @@ class REPLAgent(BaseModel):
         system_prompt = build_repl_system_prompt(
             var_summary=self.session.summarize_namespace(max_vars=30),
             skills_description=load_skill_descriptions(self.session.skills_dir),
-            repl_context=self.session.get_activity_context(max_chars=4000),
+            repl_context=self.prompt_handler.get_context(),
             prior_session=self.session.load_last_session(),
         )
 
@@ -135,6 +138,7 @@ class REPLAgent(BaseModel):
 
 def create_repl_agent(
     session: SessionState,
+    prompt_handler: PromptHandler,
     model: str,
     max_turns: int,
 ) -> REPLAgent:
@@ -142,6 +146,7 @@ def create_repl_agent(
 
     Args:
         session: Session state.
+        prompt_handler: Handler for accumulating context.
         model: Claude model to use.
         max_turns: Maximum turns in the agentic loop.
 
@@ -152,6 +157,7 @@ def create_repl_agent(
 
     return REPLAgent(
         session=session,
+        prompt_handler=prompt_handler,
         llm=llm,
         max_turns=max_turns,
     )

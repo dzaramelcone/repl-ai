@@ -6,13 +6,15 @@ import pytest
 
 from mahtab.agent.repl_agent import REPLAgent, create_repl_agent
 from mahtab.core.state import SessionState
+from mahtab.io.handlers import PromptHandler
 
 
 @pytest.mark.asyncio
 async def test_repl_agent_ask_uses_graph():
     """Test that REPLAgent.ask() invokes the graph."""
     session = SessionState()
-    agent = REPLAgent(session=session)
+    prompt_handler = PromptHandler()
+    agent = REPLAgent(session=session, prompt_handler=prompt_handler)
 
     # Mock the graph
     mock_graph = AsyncMock()
@@ -34,7 +36,7 @@ async def test_repl_agent_ask_uses_graph():
 async def test_repl_agent_ask_updates_session_messages():
     """Test that ask() updates session messages from graph result."""
     session = SessionState()
-    agent = REPLAgent(session=session)
+    agent = REPLAgent(session=session, prompt_handler=PromptHandler())
 
     from langchain_core.messages import AIMessage, HumanMessage
 
@@ -60,7 +62,7 @@ async def test_repl_agent_ask_updates_session_messages():
 def test_repl_agent_has_graph_after_init():
     """Test that REPLAgent builds the graph on initialization."""
     session = SessionState()
-    agent = REPLAgent(session=session)
+    agent = REPLAgent(session=session, prompt_handler=PromptHandler())
 
     # Graph should be built
     assert agent._graph is not None
@@ -72,7 +74,9 @@ def test_repl_agent_has_graph_after_init():
 def test_create_repl_agent_with_all_args():
     """Test create_repl_agent with explicit arguments."""
     session = SessionState()
-    agent = create_repl_agent(session=session, model="claude-haiku-4-5-20251001", max_turns=5)
+    agent = create_repl_agent(
+        session=session, prompt_handler=PromptHandler(), model="claude-haiku-4-5-20251001", max_turns=5
+    )
 
     assert agent.session is session
     assert agent.max_turns == 5
@@ -82,7 +86,9 @@ def test_create_repl_agent_with_all_args():
 def test_create_repl_agent_custom_max_turns():
     """Test create_repl_agent with custom max_turns."""
     session = SessionState()
-    agent = create_repl_agent(session=session, model="claude-haiku-4-5-20251001", max_turns=10)
+    agent = create_repl_agent(
+        session=session, prompt_handler=PromptHandler(), model="claude-haiku-4-5-20251001", max_turns=10
+    )
 
     assert agent.max_turns == 10
 
@@ -93,7 +99,7 @@ def test_repl_agent_clear_history():
     session.add_user_message("hello")
     session.add_assistant_message("hi")
 
-    agent = REPLAgent(session=session)
+    agent = REPLAgent(session=session, prompt_handler=PromptHandler())
     assert len(session.messages) == 2
 
     agent.clear_history()
@@ -103,7 +109,7 @@ def test_repl_agent_clear_history():
 def test_repl_agent_ask_sync():
     """Test synchronous ask_sync wrapper."""
     session = SessionState()
-    agent = REPLAgent(session=session)
+    agent = REPLAgent(session=session, prompt_handler=PromptHandler())
 
     mock_graph = AsyncMock()
     mock_graph.ainvoke.return_value = {
@@ -125,7 +131,7 @@ async def test_ask_accepts_streaming_handler():
     from mahtab.ui.streaming import StreamingHandler
 
     session = SessionState()
-    agent = REPLAgent(session=session)
+    agent = REPLAgent(session=session, prompt_handler=PromptHandler())
 
     mock_graph = AsyncMock()
     mock_graph.ainvoke.return_value = {
@@ -152,7 +158,7 @@ async def test_ask_accepts_streaming_handler():
 async def test_ask_passes_on_execution_callback():
     """ask() should pass on_execution callback in initial state."""
     session = SessionState()
-    agent = REPLAgent(session=session)
+    agent = REPLAgent(session=session, prompt_handler=PromptHandler())
 
     mock_graph = AsyncMock()
     mock_graph.ainvoke.return_value = {

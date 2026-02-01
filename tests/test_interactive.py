@@ -1,5 +1,7 @@
 """Tests for interactive REPL module."""
 
+import logging
+
 import pytest
 
 from mahtab.core.state import SessionState
@@ -15,7 +17,8 @@ class TestDynamicPromptInputMode:
 
         session = SessionState()
         ns = {}
-        return DynamicPrompt(session, ns)
+        log = logging.getLogger("test")
+        return DynamicPrompt(session, ns, log)
 
     def test_input_mode_defaults_to_repl(self, prompt):
         """DynamicPrompt should start in REPL mode."""
@@ -59,7 +62,8 @@ class TestToggleMode:
 
         session = SessionState()
         ns = {}
-        return DynamicPrompt(session, ns)
+        log = logging.getLogger("test")
+        return DynamicPrompt(session, ns, log)
 
     def test_toggle_mode_from_repl_to_chat(self, prompt):
         """Toggle from REPL should switch to CHAT."""
@@ -137,7 +141,8 @@ class TestInteractiveREPL:
 
         session = SessionState()
         ns = {}
-        prompt_obj = DynamicPrompt(session, ns)
+        log = logging.getLogger("test")
+        prompt_obj = DynamicPrompt(session, ns, log)
         calls = []
 
         def ask_func(text):
@@ -196,7 +201,8 @@ class TestDynamicPromptFormatting:
         # Add a message to create history using the proper method
         session.add_user_message("test message content that is reasonably long")
         ns = {}
-        return DynamicPrompt(session, ns)
+        log = logging.getLogger("test")
+        return DynamicPrompt(session, ns, log)
 
     @pytest.fixture
     def prompt_with_usage(self):
@@ -207,14 +213,16 @@ class TestDynamicPromptFormatting:
         # Record some usage to trigger cost display
         session.usage.record(cost=0.04, input_tokens=100, output_tokens=50, cache_read=0, cache_create=0)
         ns = {}
-        return DynamicPrompt(session, ns)
+        log = logging.getLogger("test")
+        return DynamicPrompt(session, ns, log)
 
     def test_prompt_contains_memory_mb(self):
         """Prompt should show memory usage in MB format."""
         from mahtab.repl.interactive import DynamicPrompt
 
         session = SessionState()
-        prompt = DynamicPrompt(session, {})
+        log = logging.getLogger("test")
+        prompt = DynamicPrompt(session, {}, log)
         result = str(prompt)
         # Should contain "MB" for memory
         assert "MB" in result
