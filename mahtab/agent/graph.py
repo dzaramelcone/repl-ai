@@ -168,3 +168,41 @@ async def reflect_node(state: AgentState, llm) -> dict:
     result = _parse_reflection_response(response.content)
 
     return {"reflection": result}
+
+
+def should_execute(state: AgentState) -> str:
+    """Determine whether to execute code or end.
+
+    Args:
+        state: Current agent state.
+
+    Returns:
+        "execute" if there are code blocks, "end" otherwise.
+    """
+    if state.get("code_blocks"):
+        return "execute"
+    return "end"
+
+
+def should_continue(state: AgentState, max_turns: int = 5) -> str:
+    """Determine whether to continue generating or end.
+
+    Args:
+        state: Current agent state with reflection result.
+        max_turns: Maximum number of generation turns.
+
+    Returns:
+        "generate" to continue, "end" to finish.
+    """
+    reflection = state.get("reflection")
+
+    # If reflection says complete, we're done
+    if reflection and reflection.is_complete:
+        return "end"
+
+    # If we've hit max turns, stop
+    if state.get("turn_count", 0) >= max_turns:
+        return "end"
+
+    # Otherwise, continue
+    return "generate"
