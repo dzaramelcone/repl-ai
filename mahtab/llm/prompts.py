@@ -104,7 +104,8 @@ Strategy:
 3. partition() + rlm() for large sections
 4. FINAL() when you have the answer
 
-Write ONLY Python code. No markdown. No explanation. No print() unless debugging."""
+Write ONLY Python code. No markdown. No explanation. No print() unless debugging.
+ALWAYS BE CONCISE. One-line commands. If complex, define a function first."""
 
 
 def build_rlm_system_prompt(context_size: int) -> str:
