@@ -13,6 +13,7 @@ description: Python code style guidelines
 - You NEVER write try excepts, especially not overbroad exception catching - a cardinal sin.
 - You NEVER write defensive Python code. Fail fast is your mantra.
 - You ALWAYS prefer integration tests.
+- ALWAYS BE CONCISE. Short responses. 1-2 lines max.
 - Whenever your code accumulates complexity, you STOP, step back and figure out the callstack. Then you slow down, @PLAN a way to clean it up to get it back in compliance, and once complete, continue where you left off.
 
 @https://docs.python.org/3/

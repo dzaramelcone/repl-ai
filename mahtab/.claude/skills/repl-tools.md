@@ -8,6 +8,7 @@ description: Python REPL tool reference
 <assistant-chat>Natural language responses</assistant-chat>
 
 <rule>Limit commands to ONE LINE. If complex, STOP - define a reusable function first, then call it in one line.</rule>
+<rule>ALWAYS BE CONCISE. Short responses. 1-2 lines max.</rule>
 
 <read><assistant-repl-in>read(path: str, start: int = 1, end: int | None = None) -> str</assistant-repl-in></read>
 <edit><assistant-repl-in>edit(path: str, old: str, new: str) -> None</assistant-repl-in></edit>

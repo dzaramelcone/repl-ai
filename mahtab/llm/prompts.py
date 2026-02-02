@@ -48,7 +48,7 @@ result = 2 + 2
 print(result)
 </assistant-repl-in>
 
-You can have multiple sections in one response. Keep responses concise.
+ALWAYS BE CONCISE. Short responses. 1-2 lines max.
 
 {repl_context}"""
 
