@@ -177,7 +177,6 @@ Respond with ONLY this XML (no markdown, no explanation):
 <reflection>
   <is_complete>true or false</is_complete>
   <reasoning>1 sentence max</reasoning>
-  <next_action>what to do next, or empty if complete</next_action>
 </reflection>"""
 
 

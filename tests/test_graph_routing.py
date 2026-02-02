@@ -33,7 +33,7 @@ def test_should_continue_incomplete_under_limit():
     from mahtab.agent.graph import should_continue
 
     state: AgentState = {
-        "reflection": ReflectionResult(is_complete=False, reasoning="Need more", next_action="Fix it"),
+        "reflection": ReflectionResult(is_complete=False, reasoning="Need more"),
         "turn_count": 2,
     }
     assert should_continue(state, max_turns=5) == "generate"

@@ -92,7 +92,7 @@ def test_execute_node_updates_namespace():
 def test_reflect_node_parses_complete():
     from mahtab.agent.graph import _parse_reflection_response
 
-    response = "<reflection><is_complete>true</is_complete><reasoning>Task done</reasoning><next_action></next_action></reflection>"
+    response = "<reflection><is_complete>true</is_complete><reasoning>Task done</reasoning></reflection>"
     result = _parse_reflection_response(response)
     assert result.is_complete is True
     assert result.reasoning == "Task done"
@@ -101,10 +101,10 @@ def test_reflect_node_parses_complete():
 def test_reflect_node_parses_incomplete():
     from mahtab.agent.graph import _parse_reflection_response
 
-    response = "<reflection><is_complete>false</is_complete><reasoning>Need more</reasoning><next_action>Add validation</next_action></reflection>"
+    response = "<reflection><is_complete>false</is_complete><reasoning>Need more</reasoning></reflection>"
     result = _parse_reflection_response(response)
     assert result.is_complete is False
-    assert result.next_action == "Add validation"
+    assert result.reasoning == "Need more"
 
 
 def test_reflect_node_crashes_on_malformed_xml():

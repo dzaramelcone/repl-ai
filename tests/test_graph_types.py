@@ -4,22 +4,15 @@ from mahtab.agent.graph import AgentState, ReflectionResult
 
 
 def test_reflection_result_complete():
-    result = ReflectionResult(
-        is_complete=True,
-        reasoning="Task accomplished",
-    )
+    result = ReflectionResult(is_complete=True, reasoning="Task accomplished")
     assert result.is_complete is True
-    assert result.next_action == ""
+    assert result.reasoning == "Task accomplished"
 
 
 def test_reflection_result_incomplete():
-    result = ReflectionResult(
-        is_complete=False,
-        reasoning="Missing step",
-        next_action="Add error handling",
-    )
+    result = ReflectionResult(is_complete=False, reasoning="Missing step")
     assert result.is_complete is False
-    assert result.next_action == "Add error handling"
+    assert result.reasoning == "Missing step"
 
 
 def test_agent_state_typing():

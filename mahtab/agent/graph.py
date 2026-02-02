@@ -15,7 +15,6 @@ class ReflectionResult(BaseXmlModel, tag="reflection"):
 
     is_complete: bool = element()
     reasoning: str = element()
-    next_action: str = element(default="")
 
 
 class AgentState(TypedDict, total=False):
